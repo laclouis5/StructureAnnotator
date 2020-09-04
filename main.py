@@ -113,7 +113,7 @@ def main():
     cv.resizeWindow("window", 1200, 800)
 
     img = cv.imread("test.jpg")
-    store = AnnotationStore([PlantAnnotation()])
+    store = AnnotationStore()
     cursor = TargetCursor()
     drag = DragGesture()
 
@@ -137,8 +137,6 @@ def main():
             drag.is_dragging = False
             store.annotations[-1].box.x2 = x
             store.annotations[-1].box.y2 = y
-
-        print(drag)
 
     cv.setMouseCallback("window", on_mouse_event)
 
