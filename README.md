@@ -1,4 +1,4 @@
-# StructureAnnotator 
+# Structure Annotator 
 Software for annotating images with the structure of crops. It was coded with the a\*s in the urge, hope mom and dad won't find out. Use at you own risk. Work still in progress and document is not complete.
 
 ![illustration](illustration.png)
