@@ -1,5 +1,5 @@
 import argparse
-# import cv2 as cv
+import cv2 as cv
 import json
 import os
 
@@ -11,7 +11,7 @@ class PointAnnotation:
         self.y = y
 
     def draw_on(self, image):
-        color = (0, 255, 0) if self.kind = "stem" else (0, 0, 255)
+        color = (0, 255, 0) if self.kind == "stem" else (0, 0, 255)
         cv.circle(image, center=(self.x, self.y), radius=8, color=color, thickness=-1)
 
 
@@ -50,13 +50,13 @@ class PlantAnnotation:
         if self.box is not None:
             self.box.draw_on(image)
 
-        for point in self.points:
-            point.draw_on(image)
-
         if len(self.points) > 1:
             stem = self.points[0]
-            for p in self.points[:1]:
+            for p in self.points[1:]:
                 cv.line(image, (p.x, p.y), (stem.x, stem.y), color=(0, 0, 255), thickness=2)
+
+        for point in self.points:
+            point.draw_on(image)
 
     @property
     def is_empty(self):
@@ -105,6 +105,12 @@ class AnnotationStore:
         if self.is_empty:
             self.annotations.append(PlantAnnotation(label))
 
+    def save_to_json(self, name):
+        NotImplementedError("Soon avaiable")
+
+    def reset(self):
+        self.annotations = []
+
 
 class DragGesture:
     def __init__(self):
@@ -117,7 +123,10 @@ class DragGesture:
 class Canvas:
     def __init__(self, image, drawables=None):
         self.image = image
-        self.drawables = [] is drawables is None else drawables
+        if drawables is None:
+            self.drawables = []
+        else:
+            self.drawables = drawables
 
     def render(self):
         draw_img = self.image.copy()
@@ -128,15 +137,17 @@ class Canvas:
         return draw_img
 
 
-def files_with_extension(folder, extensions):
-    image_extensions = [".jpg", ".jpeg", ".png"]
+class RefCell:
+    def __init__(self, value):
+        self.value = value
 
-    if isinstance(extensions, str):
-        extensions = [extensions]
+
+def images_in(folder):
+    image_extensions = [".jpg", ".jpeg", ".png"]
 
     files = [os.path.join(folder, file)
         for file in os.listdir(folder)
-        if os.path.splitext(file)[1] in extensions]
+        if os.path.splitext(file)[1] in image_extensions]
 
     return files
 
@@ -167,24 +178,27 @@ def parse_args():
 
 def main():
     args = parse_args()
-    
-    input_dir = args.diretory
+
+    input_dir = args.directory
     save_dir = args.save_dir
     labels = args.labels
 
-    flags = cv.WINDOW_NORMAL
-    cv.namedWindow("window", flags)
-    cv.resizeWindow("window", 1200, 800)
-
-    canvas = Canvas(cv.imread("test.jpg"), [
-        AnnotationStore(),
-        TargetCursor()
-    ])
-
-    drag = DragGesture()
+    images = images_in(folder=input_dir)
+    image_index = 0
+    image = cv.imread(images[image_index])
     label = labels[0]
 
+    cv.namedWindow("window", cv.WINDOW_NORMAL)
+    cv.resizeWindow("window", 1200, 800)
+    need_rerendering = RefCell(True)
+
+    store = AnnotationStore()
+    cursor = TargetCursor()
+    canvas = Canvas(image, [store, cursor])
+    drag = DragGesture()
+
     def on_mouse_event(event, x, y, flags, params):
+        need_rerendering.value = True
         if event == cv.EVENT_LBUTTONDBLCLK:
             drag.is_dragging = False
             store.create_annotation_if_needed(label)
@@ -204,13 +218,16 @@ def main():
     cv.setMouseCallback("window", on_mouse_event)
 
     while True:
-        draw_img = canvas.render()
-        cv.imshow("window", draw_img)
+        if need_rerendering.value:
+            draw_img = canvas.render()
+            cv.imshow("window", draw_img)
+            need_rerendering.value = False
 
-        key = cv.waitKey(1) & 0xFF
+        key = cv.waitKey(15) & 0xFF
         if key == ord("q"):
             break
         elif key == ord("z"):
+            need_rerendering.value = True
             if not store.is_empty:
                 last = store.annotations[-1]
 
@@ -222,13 +239,34 @@ def main():
                 else:
                     store.annotations.pop()
         elif key == ord("a"):
+            need_rerendering.value = True
             if not store.is_empty and not store.annotations[-1].is_empty:
                 store.annotations.append(PlantAnnotation(label))
         elif key in [ord(f"{n}") for n in range(1, 10)]:
+            need_rerendering.value = True
             index = int(chr(key))
             if index < len(labels):
                 label = labels[index - 1]
+        elif key == ord("e"):
+            print("prev", image_index)
+            # Save annotation
+            # Clear canvas and current annotations
+            # Load new image and create new empty annotation
+            if image_index > 0:  # Only perform if changing image
+                store.save_to_json("test.json")
+                store.reset()  # Clear the store
+                image_index -= 1
+                canvas.image = cv.imread(images[image_index])
+                need_rerendering.value = True
 
+        elif key == ord("r"):
+            print("next", image_index)
+            if image_index < len(images):
+                store.save_to_json("test.json")
+                store.reset()
+                image_index += 1
+                canvas.image = cv.imread(images[image_index])
+                need_rerendering.value = True
 
     cv.destroyAllWindows()
 
