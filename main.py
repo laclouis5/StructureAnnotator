@@ -185,7 +185,7 @@ def main():
 
     images = images_in(folder=input_dir)
     image_index = 0
-    image = cv.imread(images[image_index])
+    image = cv.imread(images[image_index])  # Need to make this optional in case foder w/out image
     label = labels[0]
 
     cv.namedWindow("window", cv.WINDOW_NORMAL)
