@@ -34,6 +34,7 @@ This software can annotate crops, which are composed of one stem (green), many l
 - [ ] Add normalized keypoint point rendering
 - [ ] Add label text to figure
 - [ ] Command to change folder
+- [ ] Change current crop focus
 
 ## Will Never Do
 - Clean code and refactor
