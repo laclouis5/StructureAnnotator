@@ -4,6 +4,42 @@ import json
 import os
 
 
+"""
+{
+    image_name = "image.jpg",
+    image_path = "/absolute/path/to/image.jpg",
+    crops = [
+        {
+            label = "haricot",
+            box = {
+                x_min = 1,
+                y_min = 2,
+                x_max = 3,
+                y_max = 4
+            },
+            parts = [
+                {
+                    kind = "stem",
+                    location = {
+                        x = 1,
+                        y = 2
+                    },
+
+                },
+                {
+                    kind = "leaf",
+                    location = {
+                        x = 3,
+                        y = 3
+                    }
+                }
+            ]
+        },
+        ...
+    ]
+}
+"""
+
 class PointAnnotation:
     def __init__(self, kind, x, y):
         self.kind = kind
@@ -13,6 +49,9 @@ class PointAnnotation:
     def draw_on(self, image):
         color = (0, 255, 0) if self.kind == "stem" else (0, 0, 255)
         cv.circle(image, center=(self.x, self.y), radius=8, color=color, thickness=-1)
+
+    def json_repr(self):
+        return {"kind": self.kind, "location": {"x": self.x, "y": self.y}}
 
 
 class BoxAnnotation:
@@ -30,6 +69,9 @@ class BoxAnnotation:
         cv.rectangle(image, pt1=(self.x, self.y), pt2=(self.x2, self.y2),
             color=(255, 0, 0),
             thickness=2)
+
+    def json_repr(self):
+        return {"x_min": self.x, "y_min": self.y, "x_max": self.x2, "y_max": self.y2}
 
 
 class PlantAnnotation:
@@ -62,21 +104,9 @@ class PlantAnnotation:
     def is_empty(self):
         return len(self.points) == 0 and self.box is None
 
-
-class TargetCursor:
-    def __init__(self, x=0, y=0):
-        self.x = x
-        self.y = y
-
-    def update(self, x, y):
-        self.x = x
-        self.y = y
-
-    def draw_on(self, image):
-        (h, w) = image.shape[:2]
-
-        cv.line(image, pt1=(0, self.y), pt2=(w, self.y), color=(255, 255, 255), thickness=2)
-        cv.line(image, pt1=(self.x, 0), pt2=(self.x, h), color=(255, 255, 255), thickness=2)
+    def json_repr(self):
+        box = self.box.json_repr() if self.box is not None else None
+        return {"label": self.label, "box": box, "parts": [p.json_repr() for p in self.points]}
 
 
 class AnnotationStore:
@@ -105,11 +135,38 @@ class AnnotationStore:
         if self.is_empty:
             self.annotations.append(PlantAnnotation(label))
 
-    def save_to_json(self, name):
-        NotImplementedError("Soon avaiable")
-
     def reset(self):
         self.annotations = []
+
+    def save_json(self, image_path, save_dir):
+        if self.is_empty:
+            return
+
+        image_name = os.path.basename(image_path)
+        json_repr = {
+            "image_name": image_name,
+            "image_path": image_path,
+            "crops": [c.json_repr() for c in self.annotations]}
+
+        save_name = os.path.join(save_dir, os.path.splitext(image_name)[0]) + ".json"
+
+        data = json.dumps(json_repr, indent=2)
+        with open(save_name, "w") as f: f.write(data)
+
+class TargetCursor:
+    def __init__(self, x=0, y=0):
+        self.x = x
+        self.y = y
+
+    def update(self, x, y):
+        self.x = x
+        self.y = y
+
+    def draw_on(self, image):
+        (h, w) = image.shape[:2]
+
+        cv.line(image, pt1=(0, self.y), pt2=(w, self.y), color=(255, 255, 255), thickness=2)
+        cv.line(image, pt1=(self.x, 0), pt2=(self.x, h), color=(255, 255, 255), thickness=2)
 
 
 class DragGesture:
@@ -210,7 +267,7 @@ def main():
         elif event == cv.EVENT_MBUTTONDOWN:
             drag.is_dragging = True
             store.create_annotation_if_needed(label)
-            store.annotations[-1].box = BoxAnnotation(x, y, x, y)
+            store.last.box = BoxAnnotation(x, y, x, y)
         elif event == cv.EVENT_MBUTTONUP:
             drag.is_dragging = False
             store.last.box.update_tail(x, y)
@@ -224,7 +281,7 @@ def main():
             need_rerendering.value = False
 
         key = cv.waitKey(15) & 0xFF
-        if key == ord("q"):
+        if key == ord("q"):  # Add a save annotation here or at the end of loop
             break
         elif key == ord("z"):
             need_rerendering.value = True
@@ -240,7 +297,7 @@ def main():
                     store.annotations.pop()
         elif key == ord("a"):
             need_rerendering.value = True
-            if not store.is_empty and not store.annotations[-1].is_empty:
+            if not store.is_empty and not store.last.is_empty:
                 store.annotations.append(PlantAnnotation(label))
         elif key in [ord(f"{n}") for n in range(1, 10)]:
             need_rerendering.value = True
@@ -248,21 +305,17 @@ def main():
             if index < len(labels):
                 label = labels[index - 1]
         elif key == ord("e"):
-            print("prev", image_index)
-            # Save annotation
-            # Clear canvas and current annotations
-            # Load new image and create new empty annotation
-            if image_index > 0:  # Only perform if changing image
-                store.save_to_json("test.json")
-                store.reset()  # Clear the store
+            # Add a read json with a load as json
+            if image_index > 0:
+                store.save_json(images[image_index], save_dir)
+                store.reset()
                 image_index -= 1
                 canvas.image = cv.imread(images[image_index])
                 need_rerendering.value = True
 
         elif key == ord("r"):
-            print("next", image_index)
             if image_index < len(images):
-                store.save_to_json("test.json")
+                store.save_json(images[image_index], save_dir)
                 store.reset()
                 image_index += 1
                 canvas.image = cv.imread(images[image_index])
