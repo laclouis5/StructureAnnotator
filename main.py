@@ -98,7 +98,7 @@ class PlantAnnotation:
             [PointAnnotation.from_json(part) for part in json_dict["parts"]])
 
 
-class AnnotationStore:  # Change name to "ImageAnnotation"
+class ImageAnnotation:  # Change name to "ImageAnnotation"
     def __init__(self, annotations=None):
         if annotations is None:
             self.annotations = []
@@ -128,17 +128,29 @@ class AnnotationStore:  # Change name to "ImageAnnotation"
     def reset(self):
         self.annotations = []
 
+    def load_from_json(self, json_file):
+        if not os.path.isfile(json_file):
+            self.reset()
+            return self
+
+        with open(json_file, "r") as f: data = json.loads(f.read())
+        self.annotations = [PlantAnnotation.from_json(crop) for crop in data["crops"]]
+        return self
+
     def save_json(self, image_path, save_dir):
-        if self.is_empty:
+        image_name = os.path.basename(image_path)
+        save_name = os.path.join(save_dir, os.path.splitext(image_name)[0]) + ".json"
+
+        if self.is_empty or self.annotations[0].is_empty:
+            if os.path.isfile(save_name):
+                os.remove(save_name)
+                logging.info("Json file `save_name` removed because it was empty")
             return
 
-        image_name = os.path.basename(image_path)
         json_repr = {
             "image_name": image_name,
             "image_path": image_path,
             "crops": [c.json_repr() for c in self.annotations if not c.is_empty]}
-
-        save_name = os.path.join(save_dir, os.path.splitext(image_name)[0]) + ".json"
 
         data = json.dumps(json_repr, indent=2)
         with open(save_name, "w") as f: f.write(data)
@@ -148,8 +160,7 @@ class AnnotationStore:  # Change name to "ImageAnnotation"
     @classmethod
     def from_json(cls, json_file):
         with open(json_file, "r") as f: data = json.loads(f.read())
-
-        return AnnotationStore([PlantAnnotation.from_json(crop) for crop in data["crops"]])
+        return ImageAnnotation([PlantAnnotation.from_json(crop) for crop in data["crops"]])
 
 
 class TargetCursor:
@@ -177,8 +188,6 @@ class DragGesture:
 
 
 class Canvas:
-    # render_count = 0
-
     def __init__(self, image, drawables=None):
         self.image = image
         if drawables is None:
@@ -191,9 +200,6 @@ class Canvas:
 
         for d in self.drawables:
             d.draw_on(draw_img)
-
-        # logging.info(f"Canvas re-rendered (count: {Canvas.render_count})")
-        # Canvas.render_count += 1
 
         return draw_img
 
@@ -217,6 +223,11 @@ def create_dir(directory):
     if not os.path.isdir(directory):
         os.mkdir(directory)
 
+
+def json_name_for(image, save_dir):
+    basename = os.path.basename(image)
+    return os.path.join(save_dir, os.path.splitext(basename)[0]) + ".json"
+
 def parse_args():
     parser = argparse.ArgumentParser(
         description="Annotation software for structure annotation of crops.")
@@ -229,6 +240,7 @@ def parse_args():
     args = parser.parse_args()
 
     assert os.path.isdir(args.directory), "The input diretory you specified does not exists."
+    assert len(images_in(args.directory)) > 0, "No image found in input directory. Supported images types: .jpg, .png."
 
     assert len(args.labels) < 10, "Can't define more than 9 labels because there are only 9 numbers in the decimal system used on keyboards and I did not count 0 to a be a number so the maximum is 9, not 10."
 
@@ -239,6 +251,11 @@ def parse_args():
 
 
 def main():
+    logging.basicConfig(
+        filename="logs.log",
+        level=logging.DEBUG,
+        filemode="w",
+        format="%(asctime)s %(message)s")
     args = parse_args()
 
     input_dir = args.directory
@@ -246,18 +263,17 @@ def main():
     labels = args.labels
 
     create_dir(save_dir)
-    logging.basicConfig(filename="logs.log", level=logging.DEBUG, filemode="w", format="%(asctime)s %(message)s")
 
-    images = sorted(images_in(folder=input_dir))
     image_index = 0
-    image = cv.imread(images[image_index])  # Need to make this optional in case foder w/out image
+    images = sorted(images_in(folder=input_dir))
+    image = cv.imread(images[image_index])
     label = labels[0]
 
-    cv.namedWindow("window", cv.WINDOW_NORMAL)
-    cv.resizeWindow("window", 1200, 800)
+    cv.namedWindow("Crop Structure Annotator Tool", cv.WINDOW_NORMAL)
+    cv.resizeWindow("Crop Structure Annotator Tool", 1200, 800)
     need_rerendering = RefCell(True)
 
-    store = AnnotationStore()
+    store = ImageAnnotation().load_from_json(json_name_for(images[image_index], save_dir))
     cursor = TargetCursor()
     canvas = Canvas(image, [store, cursor])
     drag = DragGesture()
@@ -282,12 +298,12 @@ def main():
             box = store.last.box
             logging.info(f"Bounding box added to last crop annotation (x_min: {box.x}, y_min: {box.y}, x_max: {box.x2}, y_max: {box.y2})")
 
-    cv.setMouseCallback("window", on_mouse_event)
+    cv.setMouseCallback("Crop Structure Annotator Tool", on_mouse_event)
 
     while True:
         if need_rerendering.value:
             draw_img = canvas.render()
-            cv.imshow("window", draw_img)
+            cv.imshow("Crop Structure Annotator Tool", draw_img)
             need_rerendering.value = False
 
         key = cv.waitKey(15) & 0xFF
@@ -319,7 +335,7 @@ def main():
                 logging.info("Key 'a' pressed but no crop annotation is added, an empty annotation is already ready for use")
         elif key in [ord(f"{n}") for n in range(1, 10)]:
             index = int(chr(key))
-            if index < len(labels):
+            if index <= len(labels):
                 need_rerendering.value = True
                 label = labels[index - 1]
                 logging.info(f"Current crop label set to {label}")
@@ -327,9 +343,9 @@ def main():
             # Add a read json with a load as json
             if image_index > 0:
                 store.save_json(images[image_index], save_dir)
-                store.reset()
                 image_index -= 1
                 canvas.image = cv.imread(images[image_index])
+                store.load_from_json(json_name_for(images[image_index], save_dir))
                 need_rerendering.value = True
                 logging.info(f"Moving to previous image (name: {images[image_index]})")
             else:
@@ -338,9 +354,9 @@ def main():
         elif key == ord("r"):
             if image_index < len(images):
                 store.save_json(images[image_index], save_dir)
-                store.reset()
                 image_index += 1
                 canvas.image = cv.imread(images[image_index])
+                store.load_from_json(json_name_for(images[image_index], save_dir))
                 need_rerendering.value = True
                 logging.info(f"Moving to next image (name: {images[image_index]})")
             else:
