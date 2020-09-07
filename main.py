@@ -308,6 +308,7 @@ def main():
 
         key = cv.waitKey(15) & 0xFF
         if key == ord("q"):  # Add a save annotation here or at the end of loop
+            store.save_json(images[image_index], save_dir)
             logging.info("Quiting application (cause: key 'q' pressed)")
             break
         elif key == ord("z"):
