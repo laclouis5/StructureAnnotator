@@ -31,11 +31,14 @@ This software can annotate crops, which are composed of one stem (green), many l
 - [x] Add a command to save annotation
 - [x] Add loading of annotations
 - [x] Solve issue when input folder is empty
-- [ ] Add normalized keypoint point rendering
-- [ ] Add label text to figure
-- [ ] Command to change folder
+- [x] Add normalized keypoint point rendering
+- [x] Add label text to figure
+- [ ] Add indicator of which label is in use
 - [ ] Change current crop focus
+- [ ] Parse XML files for faster annotation
+- [ ] Add NN pre-annotation
+- [ ] Command to change folder
 
-## Will Never Do
+## Will Not Do
 - Clean code and refactor
 - Add new functionnality

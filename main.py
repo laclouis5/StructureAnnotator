@@ -11,9 +11,11 @@ class PointAnnotation:
         self.x = x
         self.y = y
 
-    def draw_on(self, image):
+    def draw_on(self, image, style={}):
+        radius = style.get("radius", 2)
         color = (0, 255, 0) if self.kind == "stem" else (0, 0, 255)
-        cv.circle(image, center=(self.x, self.y), radius=8, color=color, thickness=-1)
+        cv.circle(image, center=(self.x, self.y), radius=radius,
+            color=color, thickness=-1, lineType=cv.LINE_AA)
 
     def json_repr(self):
         return {"kind": self.kind, "location": {"x": self.x, "y": self.y}}
@@ -21,11 +23,7 @@ class PointAnnotation:
     @classmethod
     def from_json(cls, json_dict):
         location = json_dict["location"]
-
-        return PointAnnotation(
-            json_dict["kind"],
-            location["x"],
-            location["y"])
+        return PointAnnotation(json_dict["kind"], location["x"], location["y"])
 
 
 class BoxAnnotation:
@@ -39,26 +37,43 @@ class BoxAnnotation:
         self.x2 = x
         self.y2 = y
 
-    def draw_on(self, image):
-        cv.rectangle(image, pt1=(self.x, self.y), pt2=(self.x2, self.y2),
-            color=(255, 0, 0),
-            thickness=2)
+    @property
+    def x_min(self):
+        return min(self.x, self.x2)
+
+    @property
+    def y_min(self):
+        return min(self.y, self.y2)
+
+    @property
+    def x_max(self):
+        return max(self.x, self.x2)
+
+    @property
+    def y_max(self):
+        return max(self.y, self.y2)
+
+    def draw_on(self, image, style={}):
+        thickness = style.get("thickness", 2)
+        cv.rectangle(image, pt1=(self.x_min, self.y_min), pt2=(self.x_max, self.y_max),
+            color=(255, 0, 0), thickness=thickness, lineType=cv.LINE_AA)
 
     def json_repr(self):
-        return {"x_min": self.x, "y_min": self.y, "x_max": self.x2, "y_max": self.y2}
+        return {"x_min": self.x_min, "y_min": self.y_min, "x_max": self.x_max, "y_max": self.y_max}
 
     @classmethod
     def from_json(cls, json_dict):
-        return None if json_dict is None else BoxAnnotation(
+        if json_dict is None: return None
+
+        return BoxAnnotation(
             json_dict["x_min"], json_dict["y_min"],
-            json_file["x_max"], json_dict["y_max"]
-        )
+            json_dict["x_max"], json_dict["y_max"])
 
 
 class PlantAnnotation:
     def __init__(self, label, box=None, points=None):
         self.label = label
-        self.box = None
+        self.box = box
 
         if points is None:
             self.points = []
@@ -66,39 +81,53 @@ class PlantAnnotation:
             self.points = points
 
     def append_point(self, x, y):
-        kind = "stem" if self.is_empty else "leaf"
+        kind = "stem" if len(self.points) == 0 else "leaf"
         self.points.append(PointAnnotation(kind, x, y))
-        logging.info(f"New keypoint annotation added to crop annotation (kind: {kind}, position: (x: {x}, y: {y}))")
+        logging.info(f"New keypoint annotation added (kind: {kind}, position: (x: {x}, y: {y}))")
 
-    def draw_on(self, image):
-        if self.box is not None:
-            self.box.draw_on(image)
+    def draw_on(self, image, style={}):
+        thickness = style.get("thickness", 2)
+        radius = style.get("radius", 8)
 
-        if len(self.points) > 1:
+        if len(self.points) > 0:
             stem = self.points[0]
+
             for p in self.points[1:]:
-                cv.line(image, (p.x, p.y), (stem.x, stem.y), color=(0, 0, 255), thickness=2)
+                cv.line(image, (p.x, p.y), (stem.x, stem.y),
+                    color=(0, 0, 255), thickness=thickness, lineType=cv.LINE_AA)
+
+            cv.putText(image, self.label.upper(), org=(stem.x + 5, stem.y - 5),
+                fontFace=cv.FONT_HERSHEY_DUPLEX, fontScale=style.get("font_scale", 0.33),
+                color=(255, 255, 255), thickness=thickness, lineType=cv.LINE_AA)
 
         for point in self.points:
-            point.draw_on(image)
+            point.draw_on(image, style)
+
+        if self.box is not None:
+            self.box.draw_on(image, style)
+
+            if len(self.points) == 0:
+                cv.putText(image, self.label.upper(), org=(self.box.x_min + 5, self.box.y_min - 5),
+                    fontFace=cv.FONT_HERSHEY_DUPLEX, fontScale=style.get("font_scale", 0.33),
+                    color=(255, 255, 255), thickness=thickness, lineType=cv.LINE_AA)
 
     @property
     def is_empty(self):
         return len(self.points) == 0 and self.box is None
 
     def json_repr(self):
-        box = self.box.json_repr() if self.box is not None else None
+        box = self.box.json_repr() if self.box else None
         return {"label": self.label, "box": box, "parts": [p.json_repr() for p in self.points]}
 
     @classmethod
     def from_json(cls, json_dict):
         return PlantAnnotation(
             json_dict["label"],
-            BoxAnnotation.from_json(json_dict["box"]),
+            BoxAnnotation.from_json(json_dict.get("box", None)),
             [PointAnnotation.from_json(part) for part in json_dict["parts"]])
 
 
-class ImageAnnotation:  # Change name to "ImageAnnotation"
+class ImageAnnotation:
     def __init__(self, annotations=None):
         if annotations is None:
             self.annotations = []
@@ -109,9 +138,9 @@ class ImageAnnotation:  # Change name to "ImageAnnotation"
     def last(self):
         return self.annotations[-1]
 
-    def draw_on(self, image):
-        for shape in self.annotations:
-            shape.draw_on(image)
+    def draw_on(self, image, style={}):
+        for annotation in self.annotations:
+            annotation.draw_on(image, style)
 
     def __len__(self):
         return len(self.annotations)
@@ -123,7 +152,7 @@ class ImageAnnotation:  # Change name to "ImageAnnotation"
     def create_annotation_if_needed(self, label):
         if self.is_empty:
             self.annotations.append(PlantAnnotation(label))
-            logging.info(f"New crop annotation added to the store (label: {label}, cause: empty store)")
+            logging.info(f"New crop annotation with label '{label}' added (cause: no current crop annotation)")
 
     def reset(self):
         self.annotations = []
@@ -135,16 +164,18 @@ class ImageAnnotation:  # Change name to "ImageAnnotation"
 
         with open(json_file, "r") as f: data = json.loads(f.read())
         self.annotations = [PlantAnnotation.from_json(crop) for crop in data["crops"]]
+        logging.info(f"Annotations loaded from json file '{json_file}'")
+
         return self
 
     def save_json(self, image_path, save_dir):
         image_name = os.path.basename(image_path)
         save_name = os.path.join(save_dir, os.path.splitext(image_name)[0]) + ".json"
 
-        if self.is_empty or self.annotations[0].is_empty:
+        if self.is_empty or self.annotations[0].is_empty:  # Hacky thing...
             if os.path.isfile(save_name):
                 os.remove(save_name)
-                logging.info("Json file `save_name` removed because it was empty")
+                logging.info(f"Json file {save_name} removed because it was empty")
             return
 
         json_repr = {
@@ -155,12 +186,12 @@ class ImageAnnotation:  # Change name to "ImageAnnotation"
         data = json.dumps(json_repr, indent=2)
         with open(save_name, "w") as f: f.write(data)
 
-        logging.info(f"Json file '{save_name}' saved")
+        logging.info(f"Saved Json file '{save_name}'")
 
-    @classmethod
-    def from_json(cls, json_file):
-        with open(json_file, "r") as f: data = json.loads(f.read())
-        return ImageAnnotation([PlantAnnotation.from_json(crop) for crop in data["crops"]])
+    # @classmethod
+    # def from_json(cls, json_file):
+    #     with open(json_file, "r") as f: data = json.loads(f.read())
+    #     return ImageAnnotation([PlantAnnotation.from_json(crop) for crop in data["crops"]])
 
 
 class TargetCursor:
@@ -172,11 +203,14 @@ class TargetCursor:
         self.x = x
         self.y = y
 
-    def draw_on(self, image):
+    def draw_on(self, image, style={}):
+        thickness = style.get("thickness", 2)
         (h, w) = image.shape[:2]
 
-        cv.line(image, pt1=(0, self.y), pt2=(w, self.y), color=(255, 255, 255), thickness=2)
-        cv.line(image, pt1=(self.x, 0), pt2=(self.x, h), color=(255, 255, 255), thickness=2)
+        cv.line(image, pt1=(0, self.y), pt2=(w, self.y),
+            color=(255, 255, 255), thickness=thickness, lineType=cv.LINE_AA)
+        cv.line(image, pt1=(self.x, 0), pt2=(self.x, h),
+            color=(255, 255, 255), thickness=thickness, lineType=cv.LINE_AA)
 
 
 class DragGesture:
@@ -197,9 +231,15 @@ class Canvas:
 
     def render(self):
         draw_img = self.image.copy()
+        (img_h, img_w) = draw_img.shape[:2]
+        short_side = min(img_h, img_w)
+        style = {
+            "radius": int(0.75/100 * short_side),
+            "thickness": int(0.3/100 * short_side),
+            "font_scale": 0.05/100 * short_side}
 
         for d in self.drawables:
-            d.draw_on(draw_img)
+            d.draw_on(draw_img, style)
 
         return draw_img
 
@@ -269,8 +309,8 @@ def main():
     image = cv.imread(images[image_index])
     label = labels[0]
 
-    cv.namedWindow("Crop Structure Annotator Tool", cv.WINDOW_NORMAL)
-    cv.resizeWindow("Crop Structure Annotator Tool", 1200, 800)
+    cv.namedWindow("Crop Structure Annotation Tool", cv.WINDOW_NORMAL)
+    cv.resizeWindow("Crop Structure Annotation Tool", 1200, 800)
     need_rerendering = RefCell(True)
 
     store = ImageAnnotation().load_from_json(json_name_for(images[image_index], save_dir))
@@ -296,18 +336,19 @@ def main():
             drag.is_dragging = False
             store.last.box.update_tail(x, y)
             box = store.last.box
-            logging.info(f"Bounding box added to last crop annotation (x_min: {box.x}, y_min: {box.y}, x_max: {box.x2}, y_max: {box.y2})")
+            logging.info(f"Bounding box added to last crop annotation (x_min: {box.x_min}, y_min: {box.y_min}, x_max: {box.x_max}, y_max: {box.y_max})")
 
-    cv.setMouseCallback("Crop Structure Annotator Tool", on_mouse_event)
+    cv.setMouseCallback("Crop Structure Annotation Tool", on_mouse_event)
 
     while True:
         if need_rerendering.value:
             draw_img = canvas.render()
-            cv.imshow("Crop Structure Annotator Tool", draw_img)
+            cv.imshow("Crop Structure Annotation Tool", draw_img)
             need_rerendering.value = False
 
         key = cv.waitKey(15) & 0xFF
-        if key == ord("q"):  # Add a save annotation here or at the end of loop
+        if key == ord("q"):
+            store.save_json(images[image_index], save_dir)
             logging.info("Quiting application (cause: key 'q' pressed)")
             break
         elif key == ord("z"):
@@ -316,21 +357,20 @@ def main():
                 if not store.last.is_empty:
                     if store.last.box is not None:
                         store.last.box = None
-                        logging.info("Last box annotation removed (cause: key 'z' pressed)")
+                        logging.info("Last box annotation removed (key 'z' pressed)")
                     else:
                         store.last.points.pop()
-                        logging.info("Last keypoint annotation removed (cause: key 'z' pressed)")
+                        logging.info("Last keypoint annotation removed (key 'z' pressed)")
                 else:
                     store.annotations.pop()
-                    logging.info("Last Crop annotation removed (cause: key 'z' pressed)")
+                    logging.info("Last Crop annotation removed (key 'z' pressed)")
             else:
                 logging.info("Key 'z' pressed but there is no annotation to remove")
-
         elif key == ord("a"):
             if not store.is_empty and not store.last.is_empty:
                 need_rerendering.value = True  # Not usefull
                 store.annotations.append(PlantAnnotation(label))
-                logging.info(f"New crop annotation added to the store (label: {label}, cause: key 'a' pressed)")
+                logging.info(f"New crop annotation with label '{label}' added (key 'a' pressed)")
             else:
                 logging.info("Key 'a' pressed but no crop annotation is added, an empty annotation is already ready for use")
         elif key in [ord(f"{n}") for n in range(1, 10)]:
@@ -345,20 +385,19 @@ def main():
                 store.save_json(images[image_index], save_dir)
                 image_index -= 1
                 canvas.image = cv.imread(images[image_index])
+                logging.info(f"Moved to previous image '{images[image_index]}'")
                 store.load_from_json(json_name_for(images[image_index], save_dir))
                 need_rerendering.value = True
-                logging.info(f"Moving to previous image (name: {images[image_index]})")
             else:
                 logging.info("Key 'e' pressed but previous images exhausted")
-
         elif key == ord("r"):
             if image_index < len(images):
                 store.save_json(images[image_index], save_dir)
                 image_index += 1
                 canvas.image = cv.imread(images[image_index])
+                logging.info(f"Moved to next image '{images[image_index]}'")
                 store.load_from_json(json_name_for(images[image_index], save_dir))
                 need_rerendering.value = True
-                logging.info(f"Moving to next image (name: {images[image_index]})")
             else:
                 logging.info("Key 'r' pressed but next images exhausted")
 
