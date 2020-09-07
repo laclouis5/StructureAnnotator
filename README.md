@@ -3,13 +3,17 @@ Software for annotating images with the structure of crops. It was coded with th
 
 ![illustration](illustration.png)
 
-## Requirements
+## Requirements and Installation
 - Python3
 - OpenCV
+- Mouse with middle button
+
+Installing in a virtual environment is recommended. Download and unzip this repo if needed then `cd` in the main directory and issue in a terminal window:
+`pip3 install -r requirements.txt`. This will install required dependencies.
 
 ## How to Use
-- Download the project, unzip, open a terminal and `cd` in the main directory.
-- Launch the software with `python3 main.py`.
+- `cd` in the project directory (should be `StructureAnnotator`).
+- Launch the software with `python3 main.py [ARGUMENTS...]`. Read the documentation with `python3 main.py -h` for more information on the arguments.
 - Quit with keyboard command `q`.
 
 This software can annotate crops, which are composed of one stem (green), many leaves (red) and one optional bounding box (blue). The crop parts (stem and leaves) are represented as keypoints. Here is the list of commands and actions:
