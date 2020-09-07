@@ -1,44 +1,9 @@
 import argparse
 import cv2 as cv
 import json
+import logging
 import os
 
-
-"""
-{
-    image_name = "image.jpg",
-    image_path = "/absolute/path/to/image.jpg",
-    crops = [
-        {
-            label = "haricot",
-            box = {
-                x_min = 1,
-                y_min = 2,
-                x_max = 3,
-                y_max = 4
-            },
-            parts = [
-                {
-                    kind = "stem",
-                    location = {
-                        x = 1,
-                        y = 2
-                    },
-
-                },
-                {
-                    kind = "leaf",
-                    location = {
-                        x = 3,
-                        y = 3
-                    }
-                }
-            ]
-        },
-        ...
-    ]
-}
-"""
 
 class PointAnnotation:
     def __init__(self, kind, x, y):
@@ -52,6 +17,15 @@ class PointAnnotation:
 
     def json_repr(self):
         return {"kind": self.kind, "location": {"x": self.x, "y": self.y}}
+
+    @classmethod
+    def from_json(cls, json_dict):
+        location = json_dict["location"]
+
+        return PointAnnotation(
+            json_dict["kind"],
+            location["x"],
+            location["y"])
 
 
 class BoxAnnotation:
@@ -73,6 +47,13 @@ class BoxAnnotation:
     def json_repr(self):
         return {"x_min": self.x, "y_min": self.y, "x_max": self.x2, "y_max": self.y2}
 
+    @classmethod
+    def from_json(cls, json_dict):
+        return None if json_dict is None else BoxAnnotation(
+            json_dict["x_min"], json_dict["y_min"],
+            json_file["x_max"], json_dict["y_max"]
+        )
+
 
 class PlantAnnotation:
     def __init__(self, label, box=None, points=None):
@@ -87,6 +68,7 @@ class PlantAnnotation:
     def append_point(self, x, y):
         kind = "stem" if self.is_empty else "leaf"
         self.points.append(PointAnnotation(kind, x, y))
+        logging.info(f"New keypoint annotation added to crop annotation (kind: {kind}, position: (x: {x}, y: {y}))")
 
     def draw_on(self, image):
         if self.box is not None:
@@ -108,8 +90,15 @@ class PlantAnnotation:
         box = self.box.json_repr() if self.box is not None else None
         return {"label": self.label, "box": box, "parts": [p.json_repr() for p in self.points]}
 
+    @classmethod
+    def from_json(cls, json_dict):
+        return PlantAnnotation(
+            json_dict["label"],
+            BoxAnnotation.from_json(json_dict["box"]),
+            [PointAnnotation.from_json(part) for part in json_dict["parts"]])
 
-class AnnotationStore:
+
+class AnnotationStore:  # Change name to "ImageAnnotation"
     def __init__(self, annotations=None):
         if annotations is None:
             self.annotations = []
@@ -134,6 +123,7 @@ class AnnotationStore:
     def create_annotation_if_needed(self, label):
         if self.is_empty:
             self.annotations.append(PlantAnnotation(label))
+            logging.info(f"New crop annotation added to the store (label: {label}, cause: empty store)")
 
     def reset(self):
         self.annotations = []
@@ -146,12 +136,21 @@ class AnnotationStore:
         json_repr = {
             "image_name": image_name,
             "image_path": image_path,
-            "crops": [c.json_repr() for c in self.annotations]}
+            "crops": [c.json_repr() for c in self.annotations if not c.is_empty]}
 
         save_name = os.path.join(save_dir, os.path.splitext(image_name)[0]) + ".json"
 
         data = json.dumps(json_repr, indent=2)
         with open(save_name, "w") as f: f.write(data)
+
+        logging.info(f"Json file '{save_name}' saved")
+
+    @classmethod
+    def from_json(cls, json_file):
+        with open(json_file, "r") as f: data = json.loads(f.read())
+
+        return AnnotationStore([PlantAnnotation.from_json(crop) for crop in data["crops"]])
+
 
 class TargetCursor:
     def __init__(self, x=0, y=0):
@@ -178,6 +177,8 @@ class DragGesture:
 
 
 class Canvas:
+    # render_count = 0
+
     def __init__(self, image, drawables=None):
         self.image = image
         if drawables is None:
@@ -190,6 +191,9 @@ class Canvas:
 
         for d in self.drawables:
             d.draw_on(draw_img)
+
+        # logging.info(f"Canvas re-rendered (count: {Canvas.render_count})")
+        # Canvas.render_count += 1
 
         return draw_img
 
@@ -209,10 +213,13 @@ def images_in(folder):
     return files
 
 
+def create_dir(directory):
+    if not os.path.isdir(directory):
+        os.mkdir(directory)
+
 def parse_args():
     parser = argparse.ArgumentParser(
         description="Annotation software for structure annotation of crops.")
-
     parser.add_argument("directory", help="Directory where images are stored.")
     parser.add_argument("--save_dir", "-s", default=None,
         help="Save directory for annotations. Default is the same as input directory.")
@@ -228,8 +235,6 @@ def parse_args():
     if args.save_dir is None:
         args.save_dir = args.directory
 
-    assert os.path.isdir(args.save_dir), "The save diretory you specified does not exists."
-
     return args
 
 
@@ -240,7 +245,10 @@ def main():
     save_dir = args.save_dir
     labels = args.labels
 
-    images = images_in(folder=input_dir)
+    create_dir(save_dir)
+    logging.basicConfig(filename="logs.log", level=logging.DEBUG, filemode="w", format="%(asctime)s %(message)s")
+
+    images = sorted(images_in(folder=input_dir))
     image_index = 0
     image = cv.imread(images[image_index])  # Need to make this optional in case foder w/out image
     label = labels[0]
@@ -271,6 +279,8 @@ def main():
         elif event == cv.EVENT_MBUTTONUP:
             drag.is_dragging = False
             store.last.box.update_tail(x, y)
+            box = store.last.box
+            logging.info(f"Bounding box added to last crop annotation (x_min: {box.x}, y_min: {box.y}, x_max: {box.x2}, y_max: {box.y2})")
 
     cv.setMouseCallback("window", on_mouse_event)
 
@@ -282,28 +292,37 @@ def main():
 
         key = cv.waitKey(15) & 0xFF
         if key == ord("q"):  # Add a save annotation here or at the end of loop
+            logging.info("Quiting application (cause: key 'q' pressed)")
             break
         elif key == ord("z"):
-            need_rerendering.value = True
             if not store.is_empty:
-                last = store.annotations[-1]
-
-                if not last.is_empty:
-                    if last.box is not None:
-                        last.box = None
+                need_rerendering.value = True
+                if not store.last.is_empty:
+                    if store.last.box is not None:
+                        store.last.box = None
+                        logging.info("Last box annotation removed (cause: key 'z' pressed)")
                     else:
-                        last.points.pop()
+                        store.last.points.pop()
+                        logging.info("Last keypoint annotation removed (cause: key 'z' pressed)")
                 else:
                     store.annotations.pop()
+                    logging.info("Last Crop annotation removed (cause: key 'z' pressed)")
+            else:
+                logging.info("Key 'z' pressed but there is no annotation to remove")
+
         elif key == ord("a"):
-            need_rerendering.value = True
             if not store.is_empty and not store.last.is_empty:
+                need_rerendering.value = True  # Not usefull
                 store.annotations.append(PlantAnnotation(label))
+                logging.info(f"New crop annotation added to the store (label: {label}, cause: key 'a' pressed)")
+            else:
+                logging.info("Key 'a' pressed but no crop annotation is added, an empty annotation is already ready for use")
         elif key in [ord(f"{n}") for n in range(1, 10)]:
-            need_rerendering.value = True
             index = int(chr(key))
             if index < len(labels):
+                need_rerendering.value = True
                 label = labels[index - 1]
+                logging.info(f"Current crop label set to {label}")
         elif key == ord("e"):
             # Add a read json with a load as json
             if image_index > 0:
@@ -312,6 +331,9 @@ def main():
                 image_index -= 1
                 canvas.image = cv.imread(images[image_index])
                 need_rerendering.value = True
+                logging.info(f"Moving to previous image (name: {images[image_index]})")
+            else:
+                logging.info("Key 'e' pressed but previous images exhausted")
 
         elif key == ord("r"):
             if image_index < len(images):
@@ -320,6 +342,9 @@ def main():
                 image_index += 1
                 canvas.image = cv.imread(images[image_index])
                 need_rerendering.value = True
+                logging.info(f"Moving to next image (name: {images[image_index]})")
+            else:
+                logging.info("Key 'r' pressed but next images exhausted")
 
     cv.destroyAllWindows()
 
