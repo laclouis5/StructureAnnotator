@@ -33,6 +33,7 @@ This software can annotate crops, which are composed of one stem (green), many l
 - [x] Solve issue when input folder is empty
 - [x] Add normalized keypoint point rendering
 - [x] Add label text to figure
+- [ ] Add indicator of which label is in use
 - [ ] Change current crop focus
 - [ ] Parse XML files for faster annotation
 - [ ] Add NN pre-annotation
