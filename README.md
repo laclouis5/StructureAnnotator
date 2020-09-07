@@ -21,13 +21,17 @@ This software can annotate crops, which are composed of one stem (green), many l
 - Drag Gesture (middle click, sorry trackpad users, will update soon): add a bounding box to the current crop.
 - Command `a`: creates a new crop. A new crop is automatically generated if none are present on the current image while issuing a creation command.
 - Command `z`: undo the last action. Because this software was coded with the a\*s redo is not implemented and if present the bounding box is deleted first.
+- Commands `e` and `r`: move to previous or next image. This saves the current annotation file automatically.
+- Commands `1` to `9`: change the crop annotation label that will be used when a new annotation is created.
 - Command `q`: quits the program.
+- Logs can be streamed in real time, open `logs.log` in a console.
 
 ## Todo
-- [ ] Add commands to change image
-- [ ] Add a command to save annotation
-- [ ] Command to change folder?
-- [ ] Drag gesture with left button instead of middle one
+- [x] Add commands to change image
+- [x] Add a command to save annotation
+- [ ] Add loading of annotations
+- [ ] Solve issue when input folder is empty
+- [ ] Command to change folder
 
 ## Will Never Do
 - Clean code and refactor
