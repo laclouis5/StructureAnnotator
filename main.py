@@ -401,6 +401,7 @@ def main():
                 need_rerendering.value = True
                 label = labels[index - 1]
                 label_view.label = label
+                if not store.is_empty: store.last.label = label
                 logging.info(f"Current crop label set to {label}")
         elif key == ord("e"):
             # Add a read json with a load as json
