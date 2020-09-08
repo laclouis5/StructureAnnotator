@@ -53,6 +53,14 @@ class BoxAnnotation:
     def y_max(self):
         return max(self.y, self.y2)
 
+    @property
+    def width(self):
+        return self.x_max - self.x_min
+
+    @property
+    def height(self):
+        return self.y_max - self.y_min
+
     def draw_on(self, image, style={}):
         thickness = style.get("thickness", 2)
         cv.rectangle(image, pt1=(self.x_min, self.y_min), pt2=(self.x_max, self.y_max),
@@ -88,6 +96,9 @@ class PlantAnnotation:
     def draw_on(self, image, style={}):
         thickness = style.get("thickness", 2)
         radius = style.get("radius", 8)
+        font_scale = style.get("font_scale", 0.33)
+        font_face = style.get("font_face", cv.FONT_HERSHEY_DUPLEX)
+        offset = int(1/100 * min(image.shape[:2]))
 
         if len(self.points) > 0:
             stem = self.points[0]
@@ -96,10 +107,6 @@ class PlantAnnotation:
                 cv.line(image, (p.x, p.y), (stem.x, stem.y),
                     color=(0, 0, 255), thickness=thickness, lineType=cv.LINE_AA)
 
-            cv.putText(image, self.label.upper(), org=(stem.x + 5, stem.y - 5),
-                fontFace=cv.FONT_HERSHEY_DUPLEX, fontScale=style.get("font_scale", 0.33),
-                color=(255, 255, 255), thickness=thickness, lineType=cv.LINE_AA)
-
         for point in self.points:
             point.draw_on(image, style)
 
@@ -107,9 +114,16 @@ class PlantAnnotation:
             self.box.draw_on(image, style)
 
             if len(self.points) == 0:
-                cv.putText(image, self.label.upper(), org=(self.box.x_min + 5, self.box.y_min - 5),
-                    fontFace=cv.FONT_HERSHEY_DUPLEX, fontScale=style.get("font_scale", 0.33),
+                cv.putText(image, self.label.upper(),
+                    org=(self.box.x_min + offset, self.box.y_min - offset),
+                    fontFace=font_face, fontScale=font_scale,
                     color=(255, 255, 255), thickness=thickness, lineType=cv.LINE_AA)
+
+        if len(self.points) != 0:
+            stem = self.points[0]
+            cv.putText(image, self.label.upper(), org=(stem.x + offset, stem.y - offset),
+                fontFace=font_face, fontScale=font_scale,
+                color=(255, 255, 255), thickness=thickness, lineType=cv.LINE_AA)
 
     @property
     def is_empty(self):
@@ -172,7 +186,7 @@ class ImageAnnotation:
         image_name = os.path.basename(image_path)
         save_name = os.path.join(save_dir, os.path.splitext(image_name)[0]) + ".json"
 
-        if self.is_empty or self.annotations[0].is_empty:  # Hacky thing...
+        if self.is_empty or self.annotations[0].is_empty:  # Hacky thing...?
             if os.path.isfile(save_name):
                 os.remove(save_name)
                 logging.info(f"Json file {save_name} removed because it was empty")
@@ -188,10 +202,10 @@ class ImageAnnotation:
 
         logging.info(f"Saved Json file '{save_name}'")
 
-    # @classmethod
-    # def from_json(cls, json_file):
-    #     with open(json_file, "r") as f: data = json.loads(f.read())
-    #     return ImageAnnotation([PlantAnnotation.from_json(crop) for crop in data["crops"]])
+    @classmethod
+    def from_json(cls, json_file):
+        with open(json_file, "r") as f: data = json.loads(f.read())
+        return ImageAnnotation([PlantAnnotation.from_json(crop) for crop in data["crops"]])
 
 
 class TargetCursor:
@@ -213,12 +227,20 @@ class TargetCursor:
             color=(255, 255, 255), thickness=thickness, lineType=cv.LINE_AA)
 
 
-class DragGesture:
-    def __init__(self):
-        self.is_dragging = False
+class LabelView:
+    def __init__(self, label):
+        self.label = label
 
-    def __str__(self):
-        return f"{self.is_dragging}"
+    def draw_on(self, image, style={}):
+        thickness = style.get("thickness", 2)
+        font_scale = style.get("font_scale", 0.33) * 1.25
+        font_face = style.get("font_face", cv.FONT_HERSHEY_DUPLEX)
+        offset = int(1/100 * min(image.shape[:2]))
+
+        cv.putText(image, "Current: " + self.label.upper(),
+            org=(0 + offset, image.shape[0] - offset),
+            fontFace=font_face, fontScale=font_scale, color=(255, 255, 255),
+            thickness=thickness, lineType=cv.LINE_AA)
 
 
 class Canvas:
@@ -282,7 +304,7 @@ def parse_args():
     assert os.path.isdir(args.directory), "The input diretory you specified does not exists."
     assert len(images_in(args.directory)) > 0, "No image found in input directory. Supported images types: .jpg, .png."
 
-    assert len(args.labels) < 10, "Can't define more than 9 labels because there are only 9 numbers in the decimal system used on keyboards and I did not count 0 to a be a number so the maximum is 9, not 10."
+    assert len(args.labels) < 10, "Can't define more than 9 labels because there are only 9 numbers in the decimal system used on keyboards and I did not count 0 to a be a number so the maximum is 9, not 10. Maybe I'll add two keys for changing labels (- and +) so this limits will no longer holds in the future."
 
     if args.save_dir is None:
         args.save_dir = args.directory
@@ -296,6 +318,7 @@ def main():
         level=logging.DEBUG,
         filemode="w",
         format="%(asctime)s %(message)s")
+    logging.info("Application started")
     args = parse_args()
 
     input_dir = args.directory
@@ -315,25 +338,24 @@ def main():
 
     store = ImageAnnotation().load_from_json(json_name_for(images[image_index], save_dir))
     cursor = TargetCursor()
-    canvas = Canvas(image, [store, cursor])
-    drag = DragGesture()
+    label_view = LabelView(label)
+    canvas = Canvas(image, [store, cursor, label_view])
 
     def on_mouse_event(event, x, y, flags, params):
         need_rerendering.value = True
         if event == cv.EVENT_LBUTTONDBLCLK:
-            drag.is_dragging = False
             store.create_annotation_if_needed(label)
             store.last.append_point(x, y)
         elif event == cv.EVENT_MOUSEMOVE:
             cursor.update(x, y)
-            if drag.is_dragging:
+            if flags == (cv.EVENT_FLAG_LBUTTON + cv.EVENT_FLAG_SHIFTKEY):
                 store.last.box.update_tail(x, y)
-        elif event == cv.EVENT_MBUTTONDOWN:
-            drag.is_dragging = True
+        elif flags == (cv.EVENT_FLAG_LBUTTON + cv.EVENT_FLAG_SHIFTKEY) \
+            and event == cv.EVENT_LBUTTONDOWN:
             store.create_annotation_if_needed(label)
             store.last.box = BoxAnnotation(x, y, x, y)
-        elif event == cv.EVENT_MBUTTONUP:
-            drag.is_dragging = False
+        elif flags == (cv.EVENT_FLAG_LBUTTON + cv.EVENT_FLAG_SHIFTKEY) \
+            and event == cv.EVENT_LBUTTONUP:
             store.last.box.update_tail(x, y)
             box = store.last.box
             logging.info(f"Bounding box added to last crop annotation (x_min: {box.x_min}, y_min: {box.y_min}, x_max: {box.x_max}, y_max: {box.y_max})")
@@ -378,6 +400,7 @@ def main():
             if index <= len(labels):
                 need_rerendering.value = True
                 label = labels[index - 1]
+                label_view.label = label
                 logging.info(f"Current crop label set to {label}")
         elif key == ord("e"):
             # Add a read json with a load as json
@@ -400,8 +423,11 @@ def main():
                 need_rerendering.value = True
             else:
                 logging.info("Key 'r' pressed but next images exhausted")
+        elif key == ord("s"):
+                store.save_json(images[image_index], save_dir)
 
     cv.destroyAllWindows()
+    logging.info("Application ended")
 
 
 if __name__ == "__main__":
