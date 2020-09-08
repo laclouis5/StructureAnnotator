@@ -145,16 +145,53 @@ class ImageAnnotation:
     def __init__(self, annotations=None):
         if annotations is None:
             self.annotations = []
+            self._target_index = None
         else:
             self.annotations = annotations
+            self._target_index = len(self.annotations) - 1
+
+    @property
+    def target(self):
+        return self.annotations[self.target_index]
+
+    @property
+    def target_index(self):
+        return self._target_index
+
+    @target_index.setter
+    def target_index(self, value):
+        if len(self.annotations) == 0:
+            self._target_index = None
+            return
+        self._target_index = max(min(value, len(self.annotations) - 1), 0)
 
     @property
     def last(self):
         return self.annotations[-1]
 
+    def append(self, annotation):
+        self.annotations.append(annotation)
+        self.target_index = len(self.annotations) - 1
+
+    def pop(self):
+        self.annotations.pop()
+        self.target_index -= 1
+        if len(self.annotations) == 0:  # Required?
+            self.target_index = None
+
     def draw_on(self, image, style={}):
         for annotation in self.annotations:
             annotation.draw_on(image, style)
+
+        if len(self.annotations) > 0 and len(self.target.points) > 0:
+            radius = int(style.get("radius", 8) * 0.5)
+            cv.circle(image, (self.target.points[0].x, self.target.points[0].y),
+                radius=radius, color=(255, 0, 0), thickness=-1, lineType=cv.LINE_AA)
+        elif len(self.annotations) > 0 and self.target.box is not None:
+            radius = int(style.get("radius", 8) * 0.5)
+            offset = int(1/100 * min(image.shape[:2]))
+            cv.circle(image, (self.target.box.x_min, self.target.box.y_min - offset),
+                radius=radius, color=(255, 0, 0), thickness=-1, lineType=cv.LINE_AA)
 
     def __len__(self):
         return len(self.annotations)
@@ -166,10 +203,12 @@ class ImageAnnotation:
     def create_annotation_if_needed(self, label):
         if self.is_empty:
             self.annotations.append(PlantAnnotation(label))
+            self.target_index = 0
             logging.info(f"New crop annotation with label '{label}' added (cause: no current crop annotation)")
 
     def reset(self):
         self.annotations = []
+        self.target_index = None
 
     def load_from_json(self, json_file):
         if not os.path.isfile(json_file):
@@ -178,6 +217,7 @@ class ImageAnnotation:
 
         with open(json_file, "r") as f: data = json.loads(f.read())
         self.annotations = [PlantAnnotation.from_json(crop) for crop in data["crops"]]
+        self.target_index = len(self.annotations) - 1
         logging.info(f"Annotations loaded from json file '{json_file}'")
 
         return self
@@ -237,7 +277,7 @@ class LabelView:
         font_face = style.get("font_face", cv.FONT_HERSHEY_DUPLEX)
         offset = int(1/100 * min(image.shape[:2]))
 
-        cv.putText(image, "Current: " + self.label.upper(),
+        cv.putText(image, "Current crop label: " + self.label.upper(),
             org=(0 + offset, image.shape[0] - offset),
             fontFace=font_face, fontScale=font_scale, color=(255, 255, 255),
             thickness=thickness, lineType=cv.LINE_AA)
@@ -281,7 +321,7 @@ def images_in(folder):
     return files
 
 
-def create_dir(directory):
+def create_dir_if_needed(directory):
     if not os.path.isdir(directory):
         os.mkdir(directory)
 
@@ -289,6 +329,7 @@ def create_dir(directory):
 def json_name_for(image, save_dir):
     basename = os.path.basename(image)
     return os.path.join(save_dir, os.path.splitext(basename)[0]) + ".json"
+
 
 def parse_args():
     parser = argparse.ArgumentParser(
@@ -325,7 +366,7 @@ def main():
     save_dir = args.save_dir
     labels = args.labels
 
-    create_dir(save_dir)
+    create_dir_if_needed(save_dir)
 
     image_index = 0
     images = sorted(images_in(folder=input_dir))
@@ -333,7 +374,7 @@ def main():
     label = labels[0]
 
     cv.namedWindow("Crop Structure Annotation Tool", cv.WINDOW_NORMAL)
-    cv.resizeWindow("Crop Structure Annotation Tool", 1200, 800)
+    cv.resizeWindow("Crop Structure Annotation Tool", 800, 800)
     need_rerendering = RefCell(True)
 
     store = ImageAnnotation().load_from_json(json_name_for(images[image_index], save_dir))
@@ -345,20 +386,20 @@ def main():
         need_rerendering.value = True
         if event == cv.EVENT_LBUTTONDBLCLK:
             store.create_annotation_if_needed(label)
-            store.last.append_point(x, y)
+            store.target.append_point(x, y)
         elif event == cv.EVENT_MOUSEMOVE:
             cursor.update(x, y)
             if flags == (cv.EVENT_FLAG_LBUTTON + cv.EVENT_FLAG_SHIFTKEY):
-                store.last.box.update_tail(x, y)
+                store.target.box.update_tail(x, y)
         elif flags == (cv.EVENT_FLAG_LBUTTON + cv.EVENT_FLAG_SHIFTKEY) \
             and event == cv.EVENT_LBUTTONDOWN:
             store.create_annotation_if_needed(label)
-            store.last.box = BoxAnnotation(x, y, x, y)
+            store.target.box = BoxAnnotation(x, y, x, y)
         elif flags == (cv.EVENT_FLAG_LBUTTON + cv.EVENT_FLAG_SHIFTKEY) \
             and event == cv.EVENT_LBUTTONUP:
-            store.last.box.update_tail(x, y)
-            box = store.last.box
-            logging.info(f"Bounding box added to last crop annotation (x_min: {box.x_min}, y_min: {box.y_min}, x_max: {box.x_max}, y_max: {box.y_max})")
+            store.target.box.update_tail(x, y)
+            box = store.target.box
+            logging.info(f"Bounding box added to target crop annotation (x_min: {box.x_min}, y_min: {box.y_min}, x_max: {box.x_max}, y_max: {box.y_max})")
 
     cv.setMouseCallback("Crop Structure Annotation Tool", on_mouse_event)
 
@@ -376,22 +417,22 @@ def main():
         elif key == ord("z"):
             if not store.is_empty:
                 need_rerendering.value = True
-                if not store.last.is_empty:
-                    if store.last.box is not None:
-                        store.last.box = None
+                if not store.target.is_empty:
+                    if store.target.box is not None:
+                        store.target.box = None
                         logging.info("Last box annotation removed (key 'z' pressed)")
                     else:
-                        store.last.points.pop()
+                        store.target.points.pop()
                         logging.info("Last keypoint annotation removed (key 'z' pressed)")
                 else:
-                    store.annotations.pop()
+                    store.pop()
                     logging.info("Last Crop annotation removed (key 'z' pressed)")
             else:
                 logging.info("Key 'z' pressed but there is no annotation to remove")
         elif key == ord("a"):
             if not store.is_empty and not store.last.is_empty:
                 need_rerendering.value = True  # Not usefull
-                store.annotations.append(PlantAnnotation(label))
+                store.append(PlantAnnotation(label))
                 logging.info(f"New crop annotation with label '{label}' added (key 'a' pressed)")
             else:
                 logging.info("Key 'a' pressed but no crop annotation is added, an empty annotation is already ready for use")
@@ -401,10 +442,10 @@ def main():
                 need_rerendering.value = True
                 label = labels[index - 1]
                 label_view.label = label
-                if not store.is_empty: store.last.label = label
+                if not store.is_empty:
+                    store.target.label = label
                 logging.info(f"Current crop label set to {label}")
         elif key == ord("e"):
-            # Add a read json with a load as json
             if image_index > 0:
                 store.save_json(images[image_index], save_dir)
                 image_index -= 1
@@ -426,6 +467,14 @@ def main():
                 logging.info("Key 'r' pressed but next images exhausted")
         elif key == ord("s"):
                 store.save_json(images[image_index], save_dir)
+        elif key == ord("w"):
+            store.target_index -= 1
+            logging.info("Targeted crop changed to previous one")
+            need_rerendering.value = True
+        elif key == ord("x"):
+            store.target_index += 1
+            logging.info("Targeted crop changed to next one")
+            need_rerendering.value = True
 
     cv.destroyAllWindows()
     logging.info("Application ended")
