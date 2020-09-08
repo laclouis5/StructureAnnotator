@@ -430,11 +430,12 @@ def main():
             else:
                 logging.info("Key 'z' pressed but there is no annotation to remove")
         elif key == ord("a"):
+            need_rerendering.value = True
             if not store.is_empty and not store.last.is_empty:
-                need_rerendering.value = True  # Not usefull
                 store.append(PlantAnnotation(label))
                 logging.info(f"New crop annotation with label '{label}' added (key 'a' pressed)")
             else:
+                store.target_index = len(store.annotations) - 1
                 logging.info("Key 'a' pressed but no crop annotation is added, an empty annotation is already ready for use")
         elif key in [ord(f"{n}") for n in range(1, 10)]:
             index = int(chr(key))

@@ -20,10 +20,11 @@ This software can annotate crops, which are composed of one stem (green), some l
 - Command `a`: creates a new crop. A new crop is automatically generated if none are present on the current image while issuing a creation command.
 - Command `z`: undo the last action (if present, the bounding box is always treated as the last annotated element). Redo is not supported.
 - Commands `e` and `r`: move to previous or next image. This saves the current annotation file automatically.
-- Command `s`: manually save the annotation.
+- Commands `w` and `x`: focus previous or next crop annotation. The focused annotation is represented by a blue circle next to the box or the stem. No visible circle means that a new empty annotation is focused.
 - Commands `1` to `9`: change the crop annotation label that will be used when a new annotation is created.
+- Command `s`: manually save the annotation. Not necessary since quitting the program of moving between images triggers saving.
 - Command `q`: quits the program.
-- Logs can be streamed in real time, open `logs.log` in a console.
+- Logs can be streamed in real time by opening `logs.log` in a console.
 
 ## Todo
 - [x] Add commands to change image
@@ -34,7 +35,7 @@ This software can annotate crops, which are composed of one stem (green), some l
 - [x] Add label text to figure
 - [x] Add indicator of which label is in use
 - [x] Change current crop focus
-- [ ] Parse XML files for faster annotation
+- [ ] Parse XML files for faster annotation (separate utility tool)
 - [ ] Add NN pre-annotation
 - [ ] Command to change folder
 
