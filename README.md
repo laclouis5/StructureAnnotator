@@ -5,10 +5,11 @@ Software for annotating images with the structure of crops. Work still in progre
 
 ## Requirements and Installation
 - Python3
-- OpenCV
+- pip3
+- virtual environment manager such as `venv` (optional)
 
 Installing in a virtual environment is recommended. Download and unzip this repo then `cd` in the main directory and issue in a terminal window:
-`pip3 install -r requirements.txt`. This will install required dependencies.
+`pip3 install -r requirements.txt`. This will install required dependencies (opencv-python and lxml).
 
 ## How to Use
 - `cd` in the project directory (should be `StructureAnnotator/`).
