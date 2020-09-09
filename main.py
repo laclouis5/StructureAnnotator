@@ -158,7 +158,7 @@ class ImageAnnotation:
 
     @target_index.setter
     def target_index(self, value):
-        if (l := len(self.annotations)) != 0:
+        if len(self) != 0:
             self._target_index = value % len(self)
         else:
             self._target_index = None
