@@ -15,6 +15,7 @@ class PointAnnotation:
     def draw_on(self, image, style={}):
         radius = style.get("radius", 2)
         color = (0, 255, 0) if self.kind == "stem" else (0, 0, 255)
+
         cv.circle(image, center=(self.x, self.y), radius=radius,
             color=color, thickness=-1, lineType=cv.LINE_AA)
 
@@ -280,8 +281,34 @@ class LabelView:
         font_face = style.get("font_face", cv.FONT_HERSHEY_DUPLEX)
         offset = int(1/100 * min(image.shape[:2]))
 
-        cv.putText(image, "Current crop label: " + self.label.upper(),
-            org=(0 + offset, image.shape[0] - offset),
+        text = "Current crop label: " + self.label.upper()
+        (_, _), b = cv.getTextSize(text, font_face, font_scale, thickness)
+        org_x = offset
+        org_y = image.shape[0] - offset - b
+
+        cv.putText(image, text, org=(org_x, org_y),
+            fontFace=font_face, fontScale=font_scale, color=(255, 255, 255),
+            thickness=thickness, lineType=cv.LINE_AA)
+
+
+class ImageNameView:
+    def __init__(self, name):
+        self.name = os.path.basename(name)
+
+    def update(self, name):
+        self.name = os.path.basename(name)
+
+    def draw_on(self, image, style={}):
+        thickness = style.get("thickness", 2)
+        font_scale = style.get("font_scale", 0.33) * 1.25
+        font_face = style.get("font_face", cv.FONT_HERSHEY_DUPLEX)
+        offset = int(1/100 * min(image.shape[:2]))
+
+        (w, _), b = cv.getTextSize(self.name, font_face, font_scale, thickness)
+        org_x = image.shape[1] - offset - w
+        org_y = image.shape[0] - offset - b
+
+        cv.putText(image, self.name, org=(org_x, org_y),
             fontFace=font_face, fontScale=font_scale, color=(255, 255, 255),
             thickness=thickness, lineType=cv.LINE_AA)
 
@@ -297,8 +324,8 @@ class Canvas:
         short_side = min(img_h, img_w)
         style = {
             "radius": int(0.75/100 * short_side),
-            "thickness": int(0.3/100 * short_side),
-            "font_scale": 0.05/100 * short_side}
+            "thickness": int(0.2/100 * short_side),
+            "font_scale": 0.07/100 * short_side}
 
         [d.draw_on(draw_img, style) for d in self.drawables]
 
@@ -348,7 +375,7 @@ class ImageReader:
     def img(self):
         return self._img_for_index(self.index)
 
-    @lru_cache(maxsize=32)
+    @lru_cache(maxsize=64)
     def _img_for_index(self, index):
         return cv.imread(self.images[index])
 
@@ -413,7 +440,8 @@ def main():
     store = ImageAnnotation().load_from_json(json_name_for(img_reader.img_name, save_dir))
     cursor = TargetCursor()
     label_view = LabelView(label)
-    canvas = Canvas(img_reader.img, [store, cursor, label_view])
+    image_name_view = ImageNameView(img_reader.img_name)
+    canvas = Canvas(img_reader.img, [store, label_view, image_name_view, cursor])
 
     def on_mouse_event(event, x, y, flags, params):
         if event == cv.EVENT_LBUTTONDBLCLK:
@@ -486,6 +514,7 @@ def main():
             if img_reader.index > 0:
                 store.save_json(img_reader.img_name, save_dir)
                 canvas.image = img_reader.prev()
+                image_name_view.update(img_reader.img_name)
                 logging.info(f"Moved to previous image '{img_reader.img_name}'")
                 store.load_from_json(json_name_for(img_reader.img_name, save_dir))
                 need_rerendering.value = True
@@ -493,6 +522,7 @@ def main():
             if img_reader.index < len(img_reader) - 1:
                 store.save_json(img_reader.img_name, save_dir)
                 canvas.image = img_reader.next()
+                image_name_view.update(img_reader.img_name)
                 logging.info(f"Moved to next image '{img_reader.img_name}'")
                 store.load_from_json(json_name_for(img_reader.img_name, save_dir))
                 need_rerendering.value = True
