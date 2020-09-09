@@ -53,25 +53,19 @@ class BoxAnnotation:
     def y_max(self):
         return max(self.y, self.y2)
 
-    @property
-    def width(self):
-        return self.x_max - self.x_min
-
-    @property
-    def height(self):
-        return self.y_max - self.y_min
-
     def draw_on(self, image, style={}):
         thickness = style.get("thickness", 2)
         cv.rectangle(image, pt1=(self.x_min, self.y_min), pt2=(self.x_max, self.y_max),
             color=(255, 0, 0), thickness=thickness, lineType=cv.LINE_AA)
 
     def json_repr(self):
-        return {"x_min": self.x_min, "y_min": self.y_min, "x_max": self.x_max, "y_max": self.y_max}
+        return {
+            "x_min": self.x_min, "y_min": self.y_min,
+            "x_max": self.x_max, "y_max": self.y_max}
 
     @classmethod
     def from_json(cls, json_dict):
-        if json_dict is None: return None
+        if not json_dict: return None
 
         return BoxAnnotation(
             json_dict["x_min"], json_dict["y_min"],
@@ -82,14 +76,10 @@ class PlantAnnotation:
     def __init__(self, label, box=None, points=None):
         self.label = label
         self.box = box
-
-        if points is None:
-            self.points = []
-        else:
-            self.points = points
+        self.points = points if points else []
 
     def append_point(self, x, y):
-        kind = "stem" if len(self.points) == 0 else "leaf"
+        kind = "stem" if not self.points else "leaf"
         self.points.append(PointAnnotation(kind, x, y))
         logging.info(f"New keypoint annotation added (kind: {kind}, position: (x: {x}, y: {y}))")
 
@@ -100,26 +90,25 @@ class PlantAnnotation:
         font_face = style.get("font_face", cv.FONT_HERSHEY_DUPLEX)
         offset = int(1/100 * min(image.shape[:2]))
 
-        if len(self.points) > 0:
+        if self.points:
             stem = self.points[0]
 
             for p in self.points[1:]:
                 cv.line(image, (p.x, p.y), (stem.x, stem.y),
                     color=(0, 0, 255), thickness=thickness, lineType=cv.LINE_AA)
 
-        for point in self.points:
-            point.draw_on(image, style)
+        [p.draw_on(image, style) for p in self.points]
 
-        if self.box is not None:
+        if self.box:
             self.box.draw_on(image, style)
 
-            if len(self.points) == 0:
+            if not self.points:
                 cv.putText(image, self.label.upper(),
                     org=(self.box.x_min + offset, self.box.y_min - offset),
                     fontFace=font_face, fontScale=font_scale,
                     color=(255, 255, 255), thickness=thickness, lineType=cv.LINE_AA)
 
-        if len(self.points) != 0:
+        if self.points:
             stem = self.points[0]
             cv.putText(image, self.label.upper(), org=(stem.x + offset, stem.y - offset),
                 fontFace=font_face, fontScale=font_scale,
@@ -127,7 +116,7 @@ class PlantAnnotation:
 
     @property
     def is_empty(self):
-        return len(self.points) == 0 and self.box is None
+        return not self.points and not self.box
 
     def json_repr(self):
         box = self.box.json_repr() if self.box else None
@@ -143,16 +132,8 @@ class PlantAnnotation:
 
 class ImageAnnotation:
     def __init__(self, annotations=None):
-        if annotations is None:
-            self.annotations = []
-            self._target_index = None
-        else:
-            self.annotations = annotations
-            self._target_index = len(self.annotations) - 1
-
-    @property
-    def target(self):
-        return self.annotations[self.target_index]
+        self.annotations = annotations if annotations else []
+        self._target_index = len(annotations) - 1 if annotations else None
 
     @property
     def target_index(self):
@@ -160,10 +141,14 @@ class ImageAnnotation:
 
     @target_index.setter
     def target_index(self, value):
-        if len(self.annotations) == 0:
+        if (l := len(self.annotations)) != 0:
+            self._target_index = max(min(value, l - 1), 0)
+        else:
             self._target_index = None
-            return
-        self._target_index = max(min(value, len(self.annotations) - 1), 0)
+
+    @property
+    def target(self):
+        return self.annotations[self.target_index]
 
     @property
     def last(self):
@@ -173,11 +158,12 @@ class ImageAnnotation:
         self.annotations.append(annotation)
         self.target_index = len(self.annotations) - 1
 
-    def pop(self):
-        self.annotations.pop()
-        self.target_index -= 1
-        if len(self.annotations) == 0:  # Required?
+    def pop_target(self):
+        if not self.annotations:
             self.target_index = None
+        else:
+            del self.annotations[self.target_index]
+            self.target_index -= 1
 
     def draw_on(self, image, style={}):
         for annotation in self.annotations:
@@ -286,10 +272,7 @@ class LabelView:
 class Canvas:
     def __init__(self, image, drawables=None):
         self.image = image
-        if drawables is None:
-            self.drawables = []
-        else:
-            self.drawables = drawables
+        self.drawables = drawables if drawables else []
 
     def render(self):
         draw_img = self.image.copy()
@@ -300,8 +283,7 @@ class Canvas:
             "thickness": int(0.3/100 * short_side),
             "font_scale": 0.05/100 * short_side}
 
-        for d in self.drawables:
-            d.draw_on(draw_img, style)
+        [d.draw_on(draw_img, style) for d in self.drawables]
 
         return draw_img
 
@@ -347,26 +329,22 @@ def parse_args():
 
     assert len(args.labels) < 10, "Can't define more than 9 labels because there are only 9 numbers in the decimal system used on keyboards and I did not count 0 to a be a number so the maximum is 9, not 10. Maybe I'll add two keys for changing labels (- and +) so this limits will no longer holds in the future."
 
-    if args.save_dir is None:
-        args.save_dir = args.directory
+    if not args.save_dir: args.save_dir = args.directory
+    create_dir_if_needed(args.save_dir)
 
     return args
 
 
 def main():
     logging.basicConfig(
-        filename="logs.log",
-        level=logging.DEBUG,
-        filemode="w",
-        format="%(asctime)s %(message)s")
+        filename="logs.log", level=logging.DEBUG,
+        filemode="w", format="%(asctime)s %(message)s")
     logging.info("Application started")
-    args = parse_args()
 
+    args = parse_args()
     input_dir = args.directory
     save_dir = args.save_dir
     labels = args.labels
-
-    create_dir_if_needed(save_dir)
 
     image_index = 0
     images = sorted(images_in(folder=input_dir))
@@ -383,20 +361,23 @@ def main():
     canvas = Canvas(image, [store, cursor, label_view])
 
     def on_mouse_event(event, x, y, flags, params):
-        need_rerendering.value = True
         if event == cv.EVENT_LBUTTONDBLCLK:
+            need_rerendering.value = True
             store.create_annotation_if_needed(label)
             store.target.append_point(x, y)
         elif event == cv.EVENT_MOUSEMOVE:
+            need_rerendering.value = True
             cursor.update(x, y)
             if flags == (cv.EVENT_FLAG_LBUTTON + cv.EVENT_FLAG_SHIFTKEY):
                 store.target.box.update_tail(x, y)
         elif flags == (cv.EVENT_FLAG_LBUTTON + cv.EVENT_FLAG_SHIFTKEY) \
             and event == cv.EVENT_LBUTTONDOWN:
+            need_rerendering.value = True
             store.create_annotation_if_needed(label)
             store.target.box = BoxAnnotation(x, y, x, y)
         elif flags == (cv.EVENT_FLAG_LBUTTON + cv.EVENT_FLAG_SHIFTKEY) \
             and event == cv.EVENT_LBUTTONUP:
+            need_rerendering.value = True
             store.target.box.update_tail(x, y)
             box = store.target.box
             logging.info(f"Bounding box added to target crop annotation (x_min: {box.x_min}, y_min: {box.y_min}, x_max: {box.x_max}, y_max: {box.y_max})")
@@ -418,14 +399,14 @@ def main():
             if not store.is_empty:
                 need_rerendering.value = True
                 if not store.target.is_empty:
-                    if store.target.box is not None:
+                    if store.target.box:
                         store.target.box = None
                         logging.info("Last box annotation removed (key 'z' pressed)")
                     else:
                         store.target.points.pop()
                         logging.info("Last keypoint annotation removed (key 'z' pressed)")
                 else:
-                    store.pop()
+                    store.pop_target()
                     logging.info("Last Crop annotation removed (key 'z' pressed)")
             else:
                 logging.info("Key 'z' pressed but there is no annotation to remove")
@@ -436,7 +417,7 @@ def main():
                 logging.info(f"New crop annotation with label '{label}' added (key 'a' pressed)")
             else:
                 store.target_index = len(store.annotations) - 1
-                logging.info("Key 'a' pressed but no crop annotation is added, an empty annotation is already ready for use")
+                logging.info("Key 'a' pressed but no crop annotation added, an empty annotation is already in use")
         elif key in [ord(f"{n}") for n in range(1, 10)]:
             index = int(chr(key))
             if index <= len(labels):
