@@ -5,14 +5,21 @@ Software for annotating images with the structure of crops. Work still in progre
 
 ## Requirements and Installation
 - Python3
-- OpenCV
+- pip3
+- virtual environment manager such as `venv` (optional)
 
-Installing in a virtual environment is recommended. Download and unzip this repo if needed then `cd` in the main directory and issue in a terminal window:
-`pip3 install -r requirements.txt`. This will install required dependencies.
+Installing in a virtual environment is recommended. Download and unzip this repo then `cd` in the main directory and issue in a terminal window:
+`pip3 install -r requirements.txt`. This will install required dependencies (opencv-python and lxml).
 
 ## How to Use
 - `cd` in the project directory (should be `StructureAnnotator/`).
-- Launch the software with `python3 main.py [ARGUMENTS...]`. Read the documentation with `python3 main.py -h` for more information on the arguments.
+- Launch the software with `python3 main.py [ARGUMENTS...]`. Read the documentation with `python3 main.py -h` for more information on the arguments. Example of use if images are stored in the folder `/path/to/images/` and you want to save annotations for maize, bean and leek crops in a new folder named `/folder/where/to/save/json_files/`:
+
+`python3 /path/to/images/ --save_dir /folder/where/to/save/json_files/ --labels maize bean leek`
+
+Or in short:
+
+`python3 /path/to/images/ -s /folder/where/to/save/json_files/ -l maize bean leek`
 
 This software can annotate crops, which are composed of one stem (green), some leaves (red) and one optional bounding box (blue). The crop parts (stem and leaves) are represented as key-points. Here is the list of commands and actions:
 - Double click (left): add a key-point to the current crop being annotated. The first one will be the stem and the others leaves.
@@ -79,6 +86,14 @@ All coordinates are absolute, 0-indexed and the origin is the top-left corner.
 - [x] Parse XML files for faster annotation (separate utility tool)
 - [ ] Add NN pre-annotation
 - [ ] Add a command to change folder
+
+## Frequent Errors
+To avoid errors, key-points are linked by a red line to their corresponding crop stem and bounding boxes by a blue line starting from the box center.
+
+- You forgot to type `a` to terminate the current crop annotation.
+- A bounding box is linked to the wrong crop. You can spot this issue thanks to the blue line, or if a crop has two labels: one above the box and the other near the stem.
+- You forgot to change the label when changing of crop type.
+- You forgot to hold `shift` during the entire duration of dragging gesture (from left click to release). The box may not span over the crop entirely or not be created.
 
 ## Known Issues
 - Creating N (>= 2) crop annotations, changing target to n != N and removing all parts with `z` will leave a hole in the internal buffer. This bug will not create empty annotations in the output JSON file since empty-ness is checked before saving.
