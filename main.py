@@ -1,5 +1,6 @@
 import argparse
 import cv2 as cv
+from functools import lru_cache
 import json
 import logging
 import os
@@ -38,20 +39,28 @@ class BoxAnnotation:
         self.y2 = y
 
     @property
-    def x_min(self):
-        return min(self.x, self.x2)
+    def x_min(self): return min(self.x, self.x2)
 
     @property
-    def y_min(self):
-        return min(self.y, self.y2)
+    def y_min(self): return min(self.y, self.y2)
 
     @property
-    def x_max(self):
-        return max(self.x, self.x2)
+    def x_max(self): return max(self.x, self.x2)
 
     @property
-    def y_max(self):
-        return max(self.y, self.y2)
+    def y_max(self): return max(self.y, self.y2)
+
+    @property
+    def width(self): return self.x_max - self.x_min
+
+    @property
+    def height(self): return self.y_max - self.y_min
+
+    @property
+    def x_mid(self): return int((self.x_min + self.x_max) / 2)
+
+    @property
+    def y_mid(self): return int((self.y_min + self.y_max) / 2)
 
     def draw_on(self, image, style={}):
         thickness = style.get("thickness", 2)
@@ -96,6 +105,14 @@ class PlantAnnotation:
             for p in self.points[1:]:
                 cv.line(image, (p.x, p.y), (stem.x, stem.y),
                     color=(0, 0, 255), thickness=thickness, lineType=cv.LINE_AA)
+
+            if self.box:
+                stem = self.points[0]
+                (x, y) = self.box.x_mid, self.box.y_mid
+                cv.circle(image, center=(x, y), radius=radius,
+                    color=(255, 0, 0), thickness=-1, lineType=cv.LINE_AA)
+                cv.line(image, (x, y), (stem.x, stem.y),
+                    color=(255, 0, 0), thickness=thickness, lineType=cv.LINE_AA)
 
         [p.draw_on(image, style) for p in self.points]
 
@@ -142,7 +159,7 @@ class ImageAnnotation:
     @target_index.setter
     def target_index(self, value):
         if (l := len(self.annotations)) != 0:
-            self._target_index = max(min(value, l - 1), 0)
+            self._target_index = value % len(self)
         else:
             self._target_index = None
 
@@ -303,6 +320,46 @@ def images_in(folder):
     return files
 
 
+class ImageReader:
+    def __init__(self, image_folder):
+        self.folder = image_folder
+        self.images = sorted(images_in(image_folder))
+        self._index = 0
+
+        assert len(self.images) > 0, "No images"
+
+    @property
+    def index(self):
+        return self._index
+
+    @index.setter
+    def index(self, value):
+        self._index = min(max(value, 0), len(self) - 1)
+
+    def next(self):
+        self.index += 1
+        return self.img
+
+    def prev(self):
+        self.index -= 1
+        return self.img
+
+    @property
+    def img(self):
+        return self._img_for_index(self.index)
+
+    @lru_cache(maxsize=32)
+    def _img_for_index(self, index):
+        return cv.imread(self.images[index])
+
+    @property
+    def img_name(self):
+        return self.images[self.index]
+
+    def __len__(self):
+        return len(self.images)
+
+
 def create_dir_if_needed(directory):
     if not os.path.isdir(directory):
         os.mkdir(directory)
@@ -346,19 +403,17 @@ def main():
     save_dir = args.save_dir
     labels = args.labels
 
-    image_index = 0
-    images = sorted(images_in(folder=input_dir))
-    image = cv.imread(images[image_index])
-    label = labels[0]
+    label = labels[0]  # `labels` is never empty
+    img_reader = ImageReader(input_dir)
 
     cv.namedWindow("Crop Structure Annotation Tool", cv.WINDOW_NORMAL)
     cv.resizeWindow("Crop Structure Annotation Tool", 800, 800)
     need_rerendering = RefCell(True)
 
-    store = ImageAnnotation().load_from_json(json_name_for(images[image_index], save_dir))
+    store = ImageAnnotation().load_from_json(json_name_for(img_reader.img_name, save_dir))
     cursor = TargetCursor()
     label_view = LabelView(label)
-    canvas = Canvas(image, [store, cursor, label_view])
+    canvas = Canvas(img_reader.img, [store, cursor, label_view])
 
     def on_mouse_event(event, x, y, flags, params):
         if event == cv.EVENT_LBUTTONDBLCLK:
@@ -392,7 +447,7 @@ def main():
 
         key = cv.waitKey(15) & 0xFF
         if key == ord("q"):
-            store.save_json(images[image_index], save_dir)
+            store.save_json(img_reader.img_name, save_dir)
             logging.info("Quiting application (cause: key 'q' pressed)")
             break
         elif key == ord("z"):
@@ -428,27 +483,21 @@ def main():
                     store.target.label = label
                 logging.info(f"Current crop label set to {label}")
         elif key == ord("e"):
-            if image_index > 0:
-                store.save_json(images[image_index], save_dir)
-                image_index -= 1
-                canvas.image = cv.imread(images[image_index])
-                logging.info(f"Moved to previous image '{images[image_index]}'")
-                store.load_from_json(json_name_for(images[image_index], save_dir))
+            if img_reader.index > 0:
+                store.save_json(img_reader.img_name, save_dir)
+                canvas.image = img_reader.prev()
+                logging.info(f"Moved to previous image '{img_reader.img_name}'")
+                store.load_from_json(json_name_for(img_reader.img_name, save_dir))
                 need_rerendering.value = True
-            else:
-                logging.info("Key 'e' pressed but previous images exhausted")
         elif key == ord("r"):
-            if image_index < len(images):
-                store.save_json(images[image_index], save_dir)
-                image_index += 1
-                canvas.image = cv.imread(images[image_index])
-                logging.info(f"Moved to next image '{images[image_index]}'")
-                store.load_from_json(json_name_for(images[image_index], save_dir))
+            if img_reader.index < len(img_reader) - 1:
+                store.save_json(img_reader.img_name, save_dir)
+                canvas.image = img_reader.next()
+                logging.info(f"Moved to next image '{img_reader.img_name}'")
+                store.load_from_json(json_name_for(img_reader.img_name, save_dir))
                 need_rerendering.value = True
-            else:
-                logging.info("Key 'r' pressed but next images exhausted")
         elif key == ord("s"):
-                store.save_json(images[image_index], save_dir)
+                store.save_json(img_reader.img_name, save_dir)
         elif key == ord("w"):
             store.target_index -= 1
             logging.info("Targeted crop changed to previous one")

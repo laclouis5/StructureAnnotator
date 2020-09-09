@@ -80,5 +80,13 @@ All coordinates are absolute, 0-indexed and the origin is the top-left corner.
 - [ ] Add NN pre-annotation
 - [ ] Add a command to change folder
 
+## Frequent Errors
+To avoid errors, key-points are linked by a red line to their corresponding crop stem and bounding boxes by a blue line starting from the box center.
+
+- You forgot to type `a` to terminate the current crop annotation.
+- A bounding box is linked to the wrong crop. You can spot this issue thanks to the blue line, or if a crop has two labels: one above the box and the other near the stem.
+- You forgot to change the label when changing of crop type.
+- You forgot to hold `shift` during the entire duration of dragging gesture (from left click to release). The box may not span over the crop entirely or not be created.
+
 ## Known Issues
 - Creating N (>= 2) crop annotations, changing target to n != N and removing all parts with `z` will leave a hole in the internal buffer. This bug will not create empty annotations in the output JSON file since empty-ness is checked before saving.
