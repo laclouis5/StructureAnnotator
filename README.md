@@ -6,7 +6,7 @@ Software for annotating images with the structure of crops. Work still in progre
 ## Installation
 This software requires Python3 and pip3. A virtual environment is recommended (`venv`). Open a shell and issue:
 
-```
+```bash
 git clone https://github.com/laclouis5/StructureAnnotator.git
 cd StructureAnnotator
 pip3 install -r requirements.txt
@@ -14,7 +14,7 @@ pip3 install -r requirements.txt
 
 Optionally if you are using `venv` to isolate the installation:
 
-```
+```bash
 git clone https://github.com/laclouis5/StructureAnnotator.git
 cd StructureAnnotator
 python3 -m venv env
