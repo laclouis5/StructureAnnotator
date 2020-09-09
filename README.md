@@ -26,6 +26,45 @@ This software can annotate crops, which are composed of one stem (green), some l
 - Command `q`: quits the program.
 - Logs can be streamed in real time by opening `logs.log` in a console.
 
+## Output Format
+Annotations are saved as JSON files in the specified save directory and the filename is the same as the corresponding image with a `.json` extension.
+
+Here is an example for image `image_1.jpg`. The annotation file `image_1.json` has exactly one crop annotation with 1 stem, 1 leaf and 1 bounding box:
+
+```json
+{
+  "image_name": "image_1.jpg",
+  "image_path": "/path/to/image_1.jpg",
+  "crops": [
+    {
+      "label": "bean",
+      "box": {
+        "x_min": 1687,
+        "y_min": 531,
+        "x_max": 2070,
+        "y_max": 829
+      },
+      "parts": [
+        {
+          "kind": "stem",
+          "location": {
+            "x": 1927,
+            "y": 680
+          }
+        },
+        {
+          "kind": "leaf",
+          "location": {
+            "x": 1684,
+            "y": 821
+          }
+        }
+      ]
+    }
+  ]
+}
+```
+
 ## Todo
 - [x] Add commands to change image
 - [x] Add a command to save annotation
