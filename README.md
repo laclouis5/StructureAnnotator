@@ -65,6 +65,8 @@ Here is an example for image `image_1.jpg`. The annotation file `image_1.json` h
 }
 ```
 
+All coordinates are absolute, 0-indexed and the origin is the top-left corner.
+
 ## Todo
 - [x] Add commands to change image
 - [x] Add a command to save annotation
@@ -74,13 +76,9 @@ Here is an example for image `image_1.jpg`. The annotation file `image_1.json` h
 - [x] Add label text to figure
 - [x] Add indicator of which label is in use
 - [x] Change current crop focus
-- [ ] Parse XML files for faster annotation (separate utility tool)
+- [x] Parse XML files for faster annotation (separate utility tool)
 - [ ] Add NN pre-annotation
 - [ ] Add a command to change folder
-
-## Will Not Do
-- Clean code and refactor
-- Add new functionality
 
 ## Known Issues
 - Creating N (>= 2) crop annotations, changing target to n != N and removing all parts with `z` will leave a hole in the internal buffer. This bug will not create empty annotations in the output JSON file since empty-ness is checked before saving.
