@@ -7,12 +7,18 @@ Software for annotating images with the structure of crops. Work still in progre
 - Python3
 - OpenCV
 
-Installing in a virtual environment is recommended. Download and unzip this repo if needed then `cd` in the main directory and issue in a terminal window:
+Installing in a virtual environment is recommended. Download and unzip this repo then `cd` in the main directory and issue in a terminal window:
 `pip3 install -r requirements.txt`. This will install required dependencies.
 
 ## How to Use
 - `cd` in the project directory (should be `StructureAnnotator/`).
-- Launch the software with `python3 main.py [ARGUMENTS...]`. Read the documentation with `python3 main.py -h` for more information on the arguments.
+- Launch the software with `python3 main.py [ARGUMENTS...]`. Read the documentation with `python3 main.py -h` for more information on the arguments. Example of use if images are stored in the folder `/path/to/images/` and you want to save annotations for maize, bean and leek crops in a new folder named `/folder/where/to/save/json_files/`:
+
+`python3 /path/to/images/ --save_dir /folder/where/to/save/json_files/ --labels maize bean leek`
+
+Or in short:
+
+`python3 /path/to/images/ -s /folder/where/to/save/json_files/ -l maize bean leek`
 
 This software can annotate crops, which are composed of one stem (green), some leaves (red) and one optional bounding box (blue). The crop parts (stem and leaves) are represented as key-points. Here is the list of commands and actions:
 - Double click (left): add a key-point to the current crop being annotated. The first one will be the stem and the others leaves.
