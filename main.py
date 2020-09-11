@@ -452,6 +452,7 @@ def main():
             need_rerendering.value = True
             cursor.update(x, y)
             if flags == (cv.EVENT_FLAG_LBUTTON + cv.EVENT_FLAG_SHIFTKEY):
+                if not store.target.box: return
                 store.target.box.update_tail(x, y)
         elif flags == (cv.EVENT_FLAG_LBUTTON + cv.EVENT_FLAG_SHIFTKEY) \
             and event == cv.EVENT_LBUTTONDOWN:
@@ -461,6 +462,7 @@ def main():
         elif flags == (cv.EVENT_FLAG_LBUTTON + cv.EVENT_FLAG_SHIFTKEY) \
             and event == cv.EVENT_LBUTTONUP:
             need_rerendering.value = True
+            if not store.target.box: return
             store.target.box.update_tail(x, y)
             box = store.target.box
             logging.info(f"Bounding box added to target crop annotation (x_min: {box.x_min}, y_min: {box.y_min}, x_max: {box.x_max}, y_max: {box.y_max})")
