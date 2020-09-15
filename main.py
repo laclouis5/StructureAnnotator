@@ -12,7 +12,8 @@ class PointAnnotation:
         self.x = x
         self.y = y
 
-    def draw_on(self, image, style={}):
+    def draw_on(self, image, style=None):
+        style = style if style else {}
         radius = style.get("radius", 2)
         color = (0, 255, 0) if self.kind == "stem" else (0, 0, 255)
 
@@ -63,7 +64,8 @@ class BoxAnnotation:
     @property
     def y_mid(self): return int((self.y_min + self.y_max) / 2)
 
-    def draw_on(self, image, style={}):
+    def draw_on(self, image, style=None):
+        style = style if style else {}
         thickness = style.get("thickness", 2)
         cv.rectangle(image, pt1=(self.x_min, self.y_min), pt2=(self.x_max, self.y_max),
             color=(255, 0, 0), thickness=thickness, lineType=cv.LINE_AA)
@@ -93,7 +95,8 @@ class PlantAnnotation:
         self.points.append(PointAnnotation(kind, x, y))
         logging.info(f"New keypoint annotation added (kind: {kind}, position: (x: {x}, y: {y}))")
 
-    def draw_on(self, image, style={}):
+    def draw_on(self, image, style=None):
+        style = style if style else {}
         thickness = style.get("thickness", 2)
         radius = style.get("radius", 8)
         font_scale = style.get("font_scale", 0.33)
@@ -183,7 +186,8 @@ class ImageAnnotation:
             del self.annotations[self.target_index]
             self.target_index -= 1
 
-    def draw_on(self, image, style={}):
+    def draw_on(self, image, style=None):
+        style = style if style else {}
         for annotation in self.annotations:
             annotation.draw_on(image, style)
 
@@ -261,7 +265,8 @@ class TargetCursor:
         self.x = x
         self.y = y
 
-    def draw_on(self, image, style={}):
+    def draw_on(self, image, style=None):
+        style = style if style else {}
         thickness = style.get("thickness", 2)
         (h, w) = image.shape[:2]
 
@@ -275,7 +280,8 @@ class LabelView:
     def __init__(self, label):
         self.label = label
 
-    def draw_on(self, image, style={}):
+    def draw_on(self, image, style=None):
+        style = style if style else {}
         thickness = style.get("thickness", 2)
         font_scale = style.get("font_scale", 0.33) * 1.25
         font_face = style.get("font_face", cv.FONT_HERSHEY_DUPLEX)
@@ -298,7 +304,8 @@ class ImageNameView:
     def update(self, name):
         self.name = os.path.basename(name)
 
-    def draw_on(self, image, style={}):
+    def draw_on(self, image, style=None):
+        style = style if style else {}
         thickness = style.get("thickness", 2)
         font_scale = style.get("font_scale", 0.33) * 1.25
         font_face = style.get("font_face", cv.FONT_HERSHEY_DUPLEX)
@@ -320,13 +327,13 @@ class Canvas:
 
     def render(self):
         draw_img = self.image.copy()
-        (img_h, img_w) = draw_img.shape[:2]
-        short_side = min(img_h, img_w)
+        short_side = min(draw_img.shape[:2])
         style = {
             "radius": int(0.75/100 * short_side),
             "thickness": int(0.2/100 * short_side),
-            "font_scale": 0.07/100 * short_side}
-
+            "font_scale": 0.07/100 * short_side,
+            "font_face": cv.FONT_HERSHEY_DUPLEX
+        }
         [d.draw_on(draw_img, style) for d in self.drawables]
 
         return draw_img
@@ -413,7 +420,8 @@ def parse_args():
 
     assert len(args.labels) < 10, "Can't define more than 9 labels because there are only 9 numbers in the decimal system used on keyboards and I did not count 0 to a be a number so the maximum is 9, not 10. Maybe I'll add two keys for changing labels (- and +) so this limits will no longer holds in the future."
 
-    if not args.save_dir: args.save_dir = args.directory
+    if not args.save_dir:
+        args.save_dir = args.directory
     create_dir_if_needed(args.save_dir)
 
     return args
