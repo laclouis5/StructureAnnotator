@@ -12,9 +12,11 @@ class PointAnnotation:
         self.x = x
         self.y = y
 
-    def draw_on(self, image, style={}):
+    def draw_on(self, image, style=None):
+        style = style if style else {}
         radius = style.get("radius", 2)
         color = (0, 255, 0) if self.kind == "stem" else (0, 0, 255)
+
         cv.circle(image, center=(self.x, self.y), radius=radius,
             color=color, thickness=-1, lineType=cv.LINE_AA)
 
@@ -62,7 +64,8 @@ class BoxAnnotation:
     @property
     def y_mid(self): return int((self.y_min + self.y_max) / 2)
 
-    def draw_on(self, image, style={}):
+    def draw_on(self, image, style=None):
+        style = style if style else {}
         thickness = style.get("thickness", 2)
         cv.rectangle(image, pt1=(self.x_min, self.y_min), pt2=(self.x_max, self.y_max),
             color=(255, 0, 0), thickness=thickness, lineType=cv.LINE_AA)
@@ -92,7 +95,8 @@ class PlantAnnotation:
         self.points.append(PointAnnotation(kind, x, y))
         logging.info(f"New keypoint annotation added (kind: {kind}, position: (x: {x}, y: {y}))")
 
-    def draw_on(self, image, style={}):
+    def draw_on(self, image, style=None):
+        style = style if style else {}
         thickness = style.get("thickness", 2)
         radius = style.get("radius", 8)
         font_scale = style.get("font_scale", 0.33)
@@ -158,7 +162,7 @@ class ImageAnnotation:
 
     @target_index.setter
     def target_index(self, value):
-        if (l := len(self.annotations)) != 0:
+        if len(self) != 0:
             self._target_index = value % len(self)
         else:
             self._target_index = None
@@ -182,7 +186,8 @@ class ImageAnnotation:
             del self.annotations[self.target_index]
             self.target_index -= 1
 
-    def draw_on(self, image, style={}):
+    def draw_on(self, image, style=None):
+        style = style if style else {}
         for annotation in self.annotations:
             annotation.draw_on(image, style)
 
@@ -260,7 +265,8 @@ class TargetCursor:
         self.x = x
         self.y = y
 
-    def draw_on(self, image, style={}):
+    def draw_on(self, image, style=None):
+        style = style if style else {}
         thickness = style.get("thickness", 2)
         (h, w) = image.shape[:2]
 
@@ -274,14 +280,42 @@ class LabelView:
     def __init__(self, label):
         self.label = label
 
-    def draw_on(self, image, style={}):
+    def draw_on(self, image, style=None):
+        style = style if style else {}
         thickness = style.get("thickness", 2)
         font_scale = style.get("font_scale", 0.33) * 1.25
         font_face = style.get("font_face", cv.FONT_HERSHEY_DUPLEX)
         offset = int(1/100 * min(image.shape[:2]))
 
-        cv.putText(image, "Current crop label: " + self.label.upper(),
-            org=(0 + offset, image.shape[0] - offset),
+        text = "Current crop label: " + self.label.upper()
+        (_, _), b = cv.getTextSize(text, font_face, font_scale, thickness)
+        org_x = offset
+        org_y = image.shape[0] - offset - b
+
+        cv.putText(image, text, org=(org_x, org_y),
+            fontFace=font_face, fontScale=font_scale, color=(255, 255, 255),
+            thickness=thickness, lineType=cv.LINE_AA)
+
+
+class ImageNameView:
+    def __init__(self, name):
+        self.name = os.path.basename(name)
+
+    def update(self, name):
+        self.name = os.path.basename(name)
+
+    def draw_on(self, image, style=None):
+        style = style if style else {}
+        thickness = style.get("thickness", 2)
+        font_scale = style.get("font_scale", 0.33) * 1.25
+        font_face = style.get("font_face", cv.FONT_HERSHEY_DUPLEX)
+        offset = int(1/100 * min(image.shape[:2]))
+
+        (w, _), b = cv.getTextSize(self.name, font_face, font_scale, thickness)
+        org_x = image.shape[1] - offset - w
+        org_y = image.shape[0] - offset - b
+
+        cv.putText(image, self.name, org=(org_x, org_y),
             fontFace=font_face, fontScale=font_scale, color=(255, 255, 255),
             thickness=thickness, lineType=cv.LINE_AA)
 
@@ -293,13 +327,13 @@ class Canvas:
 
     def render(self):
         draw_img = self.image.copy()
-        (img_h, img_w) = draw_img.shape[:2]
-        short_side = min(img_h, img_w)
+        short_side = min(draw_img.shape[:2])
         style = {
             "radius": int(0.75/100 * short_side),
-            "thickness": int(0.3/100 * short_side),
-            "font_scale": 0.05/100 * short_side}
-
+            "thickness": int(0.2/100 * short_side),
+            "font_scale": 0.07/100 * short_side,
+            "font_face": cv.FONT_HERSHEY_DUPLEX
+        }
         [d.draw_on(draw_img, style) for d in self.drawables]
 
         return draw_img
@@ -348,7 +382,7 @@ class ImageReader:
     def img(self):
         return self._img_for_index(self.index)
 
-    @lru_cache(maxsize=32)
+    @lru_cache(maxsize=64)
     def _img_for_index(self, index):
         return cv.imread(self.images[index])
 
@@ -386,7 +420,8 @@ def parse_args():
 
     assert len(args.labels) < 10, "Can't define more than 9 labels because there are only 9 numbers in the decimal system used on keyboards and I did not count 0 to a be a number so the maximum is 9, not 10. Maybe I'll add two keys for changing labels (- and +) so this limits will no longer holds in the future."
 
-    if not args.save_dir: args.save_dir = args.directory
+    if not args.save_dir:
+        args.save_dir = args.directory
     create_dir_if_needed(args.save_dir)
 
     return args
@@ -413,7 +448,8 @@ def main():
     store = ImageAnnotation().load_from_json(json_name_for(img_reader.img_name, save_dir))
     cursor = TargetCursor()
     label_view = LabelView(label)
-    canvas = Canvas(img_reader.img, [store, cursor, label_view])
+    image_name_view = ImageNameView(img_reader.img_name)
+    canvas = Canvas(img_reader.img, [store, label_view, image_name_view, cursor])
 
     def on_mouse_event(event, x, y, flags, params):
         if event == cv.EVENT_LBUTTONDBLCLK:
@@ -424,6 +460,7 @@ def main():
             need_rerendering.value = True
             cursor.update(x, y)
             if flags == (cv.EVENT_FLAG_LBUTTON + cv.EVENT_FLAG_SHIFTKEY):
+                if not store.target.box: return
                 store.target.box.update_tail(x, y)
         elif flags == (cv.EVENT_FLAG_LBUTTON + cv.EVENT_FLAG_SHIFTKEY) \
             and event == cv.EVENT_LBUTTONDOWN:
@@ -433,6 +470,7 @@ def main():
         elif flags == (cv.EVENT_FLAG_LBUTTON + cv.EVENT_FLAG_SHIFTKEY) \
             and event == cv.EVENT_LBUTTONUP:
             need_rerendering.value = True
+            if not store.target.box: return
             store.target.box.update_tail(x, y)
             box = store.target.box
             logging.info(f"Bounding box added to target crop annotation (x_min: {box.x_min}, y_min: {box.y_min}, x_max: {box.x_max}, y_max: {box.y_max})")
@@ -486,6 +524,7 @@ def main():
             if img_reader.index > 0:
                 store.save_json(img_reader.img_name, save_dir)
                 canvas.image = img_reader.prev()
+                image_name_view.update(img_reader.img_name)
                 logging.info(f"Moved to previous image '{img_reader.img_name}'")
                 store.load_from_json(json_name_for(img_reader.img_name, save_dir))
                 need_rerendering.value = True
@@ -493,6 +532,7 @@ def main():
             if img_reader.index < len(img_reader) - 1:
                 store.save_json(img_reader.img_name, save_dir)
                 canvas.image = img_reader.next()
+                image_name_view.update(img_reader.img_name)
                 logging.info(f"Moved to next image '{img_reader.img_name}'")
                 store.load_from_json(json_name_for(img_reader.img_name, save_dir))
                 need_rerendering.value = True
