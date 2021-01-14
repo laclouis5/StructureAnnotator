@@ -224,7 +224,7 @@ class ImageAnnotation:
             return self
 
         with open(json_file, "r") as f: data = json.loads(f.read())
-        self.annotations = [PlantAnnotation.from_json(crop) for crop in data["crops"]]
+        self.annotations = [PlantAnnotation.from_json(crop) for crop in data["objects"]]
         self.target_index = len(self.annotations) - 1
         logging.info(f"Annotations loaded from json file '{json_file}'")
 
@@ -241,9 +241,8 @@ class ImageAnnotation:
             return
 
         json_repr = {
-            "image_name": image_name,
             "image_path": image_path,
-            "crops": [c.json_repr() for c in self.annotations if not c.is_empty]}
+            "objects": [c.json_repr() for c in self.annotations if not c.is_empty]}
 
         data = json.dumps(json_repr, indent=2)
         with open(save_name, "w") as f: f.write(data)
@@ -253,7 +252,7 @@ class ImageAnnotation:
     @classmethod
     def from_json(cls, json_file):
         with open(json_file, "r") as f: data = json.loads(f.read())
-        return ImageAnnotation([PlantAnnotation.from_json(crop) for crop in data["crops"]])
+        return ImageAnnotation([PlantAnnotation.from_json(crop) for crop in data["objects"]])
 
 
 class TargetCursor:
@@ -406,7 +405,7 @@ def json_name_for(image, save_dir):
 
 def parse_args():
     parser = argparse.ArgumentParser(
-        description="Annotation software for structure annotation of crops.")
+        description="Annotation software for structure annotation.")
     parser.add_argument("directory", help="Directory where images are stored.")
     parser.add_argument("--save_dir", "-s", default=None,
         help="Save directory for annotations. Default is the same as input directory.")
