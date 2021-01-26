@@ -538,11 +538,13 @@ def main():
         elif key == ord("s"):
                 store.save_json(img_reader.img_name, save_dir)
         elif key == ord("w"):
-            store.target_index -= 1
+            if not store.is_empty:
+                store.target_index -= 1
             logging.info("Targeted crop changed to previous one")
             need_rerendering.value = True
         elif key == ord("x"):
-            store.target_index += 1
+            if not store.is_empty:
+                store.target_index += 1
             logging.info("Targeted crop changed to next one")
             need_rerendering.value = True
 
