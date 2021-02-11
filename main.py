@@ -328,9 +328,9 @@ class Canvas:
         draw_img = self.image.copy()
         short_side = min(draw_img.shape[:2])
         style = {
-            "radius": int(0.75/100 * short_side),
-            "thickness": int(0.2/100 * short_side),
-            "font_scale": 0.07/100 * short_side,
+            "radius": int(0.3/100 * short_side) + 1,
+            "thickness": int(0.1/100 * short_side) + 1,
+            "font_scale": 0.05/100 * short_side,
             "font_face": cv.FONT_HERSHEY_DUPLEX
         }
         [d.draw_on(draw_img, style) for d in self.drawables]
@@ -348,7 +348,7 @@ def images_in(folder):
 
     files = [os.path.join(folder, file)
         for file in os.listdir(folder)
-        if os.path.splitext(file)[1] in image_extensions]
+        if os.path.splitext(file)[1] in image_extensions and file[0] != "."]
 
     return files
 
