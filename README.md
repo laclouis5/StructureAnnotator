@@ -108,3 +108,6 @@ To avoid errors, key-points are linked by a red line to their corresponding crop
 
 ## Known Issues
 - Creating N (>= 2) crop annotations, changing target to n != N and removing all parts with `z` will leave a hole in the internal buffer. This bug will not create empty annotations in the output JSON file since empty-ness is checked before saving.
+
+## Contact
+Feel free to ask you questions or request data at louis.lac@ims-bordeaux.fr.
