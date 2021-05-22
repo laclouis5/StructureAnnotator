@@ -13,7 +13,7 @@ class PointAnnotation:
         self.y = y
 
     def draw_on(self, image, style=None):
-        style = style if style else {}
+        style = style or {}
         radius = style.get("radius", 2)
         color = (0, 255, 0) if self.kind == "stem" else (0, 0, 255)
 
@@ -65,7 +65,7 @@ class BoxAnnotation:
     def y_mid(self): return int((self.y_min + self.y_max) / 2)
 
     def draw_on(self, image, style=None):
-        style = style if style else {}
+        style = style or {}
         thickness = style.get("thickness", 2)
         cv.rectangle(image, pt1=(self.x_min, self.y_min), pt2=(self.x_max, self.y_max),
             color=(255, 0, 0), thickness=thickness, lineType=cv.LINE_AA)
@@ -88,7 +88,7 @@ class PlantAnnotation:
     def __init__(self, label, box=None, points=None):
         self.label = label
         self.box = box
-        self.points = points if points else []
+        self.points = points or []
 
     def append_point(self, x, y):
         kind = "stem" if not self.points else "leaf"
@@ -96,7 +96,7 @@ class PlantAnnotation:
         logging.info(f"New keypoint annotation added (kind: {kind}, position: (x: {x}, y: {y}))")
 
     def draw_on(self, image, style=None):
-        style = style if style else {}
+        style = style or {}
         thickness = style.get("thickness", 2)
         radius = style.get("radius", 8)
         font_scale = style.get("font_scale", 0.33)
@@ -152,8 +152,9 @@ class PlantAnnotation:
 
 
 class ImageAnnotation:
-    def __init__(self, annotations=None):
-        self.annotations = annotations if annotations else []
+    def __init__(self, annotations=None, img_size=None):
+        self.annotations = annotations or []
+        self.img_size = img_size
         self._target_index = len(annotations) - 1 if annotations else None
 
     @property
@@ -162,10 +163,7 @@ class ImageAnnotation:
 
     @target_index.setter
     def target_index(self, value):
-        if len(self) != 0:
-            self._target_index = value % len(self)
-        else:
-            self._target_index = None
+        self._target_index = value % len(self) if len(self) != 0 else None
 
     @property
     def target(self):
@@ -187,19 +185,20 @@ class ImageAnnotation:
             self.target_index -= 1
 
     def draw_on(self, image, style=None):
-        style = style if style else {}
+        style = style or {}
         for annotation in self.annotations:
             annotation.draw_on(image, style)
 
-        if len(self.annotations) > 0 and len(self.target.points) > 0:
-            radius = int(style.get("radius", 8) * 0.5)
-            cv.circle(image, (self.target.points[0].x, self.target.points[0].y),
-                radius=radius, color=(255, 0, 0), thickness=-1, lineType=cv.LINE_AA)
-        elif len(self.annotations) > 0 and self.target.box is not None:
-            radius = int(style.get("radius", 8) * 0.5)
-            offset = int(1/100 * min(image.shape[:2]))
-            cv.circle(image, (self.target.box.x_min, self.target.box.y_min - offset),
-                radius=radius, color=(255, 0, 0), thickness=-1, lineType=cv.LINE_AA)
+        if len(self.annotations) > 0:
+            if len(self.target.points) > 0:
+                radius = int(style.get("radius", 8) * 0.5)
+                cv.circle(image, (self.target.points[0].x, self.target.points[0].y),
+                    radius=radius, color=(255, 0, 0), thickness=-1, lineType=cv.LINE_AA)
+            elif self.target.box is not None:
+                radius = int(style.get("radius", 8) * 0.5)
+                offset = int(1/100 * min(image.shape[:2]))
+                cv.circle(image, (self.target.box.x_min, self.target.box.y_min - offset),
+                    radius=radius, color=(255, 0, 0), thickness=-1, lineType=cv.LINE_AA)
 
     def __len__(self):
         return len(self.annotations)
@@ -224,7 +223,7 @@ class ImageAnnotation:
             return self
 
         with open(json_file, "r") as f: data = json.loads(f.read())
-        self.annotations = [PlantAnnotation.from_json(crop) for crop in data["crops"]]
+        self.annotations = [PlantAnnotation.from_json(crop) for crop in data["objects"]]
         self.target_index = len(self.annotations) - 1
         logging.info(f"Annotations loaded from json file '{json_file}'")
 
@@ -241,9 +240,8 @@ class ImageAnnotation:
             return
 
         json_repr = {
-            "image_name": image_name,
             "image_path": image_path,
-            "crops": [c.json_repr() for c in self.annotations if not c.is_empty]}
+            "objects": [c.json_repr() for c in self.annotations if not c.is_empty]}
 
         data = json.dumps(json_repr, indent=2)
         with open(save_name, "w") as f: f.write(data)
@@ -253,7 +251,7 @@ class ImageAnnotation:
     @classmethod
     def from_json(cls, json_file):
         with open(json_file, "r") as f: data = json.loads(f.read())
-        return ImageAnnotation([PlantAnnotation.from_json(crop) for crop in data["crops"]])
+        return ImageAnnotation([PlantAnnotation.from_json(crop) for crop in data["objects"]])
 
 
 class TargetCursor:
@@ -266,7 +264,7 @@ class TargetCursor:
         self.y = y
 
     def draw_on(self, image, style=None):
-        style = style if style else {}
+        style = style or {}
         thickness = style.get("thickness", 2)
         (h, w) = image.shape[:2]
 
@@ -281,7 +279,7 @@ class LabelView:
         self.label = label
 
     def draw_on(self, image, style=None):
-        style = style if style else {}
+        style = style or {}
         thickness = style.get("thickness", 2)
         font_scale = style.get("font_scale", 0.33) * 1.25
         font_face = style.get("font_face", cv.FONT_HERSHEY_DUPLEX)
@@ -305,7 +303,7 @@ class ImageNameView:
         self.name = os.path.basename(name)
 
     def draw_on(self, image, style=None):
-        style = style if style else {}
+        style = style or {}
         thickness = style.get("thickness", 2)
         font_scale = style.get("font_scale", 0.33) * 1.25
         font_face = style.get("font_face", cv.FONT_HERSHEY_DUPLEX)
@@ -323,15 +321,15 @@ class ImageNameView:
 class Canvas:
     def __init__(self, image, drawables=None):
         self.image = image
-        self.drawables = drawables if drawables else []
+        self.drawables = drawables or []
 
     def render(self):
         draw_img = self.image.copy()
         short_side = min(draw_img.shape[:2])
         style = {
-            "radius": int(0.75/100 * short_side),
-            "thickness": int(0.2/100 * short_side),
-            "font_scale": 0.07/100 * short_side,
+            "radius": int(0.3/100 * short_side) + 1,
+            "thickness": int(0.1/100 * short_side) + 1,
+            "font_scale": 0.05/100 * short_side,
             "font_face": cv.FONT_HERSHEY_DUPLEX
         }
         [d.draw_on(draw_img, style) for d in self.drawables]
@@ -347,11 +345,9 @@ class RefCell:
 def images_in(folder):
     image_extensions = [".jpg", ".jpeg", ".png"]
 
-    files = [os.path.join(folder, file)
+    return [os.path.join(folder, file)
         for file in os.listdir(folder)
-        if os.path.splitext(file)[1] in image_extensions]
-
-    return files
+        if os.path.splitext(file)[1] in image_extensions and file[0] != "."]
 
 
 class ImageReader:
@@ -406,7 +402,7 @@ def json_name_for(image, save_dir):
 
 def parse_args():
     parser = argparse.ArgumentParser(
-        description="Annotation software for structure annotation of crops.")
+        description="Annotation software for structure annotation.")
     parser.add_argument("directory", help="Directory where images are stored.")
     parser.add_argument("--save_dir", "-s", default=None,
         help="Save directory for annotations. Default is the same as input directory.")
@@ -539,11 +535,13 @@ def main():
         elif key == ord("s"):
                 store.save_json(img_reader.img_name, save_dir)
         elif key == ord("w"):
-            store.target_index -= 1
+            if not store.is_empty:
+                store.target_index -= 1
             logging.info("Targeted crop changed to previous one")
             need_rerendering.value = True
         elif key == ord("x"):
-            store.target_index += 1
+            if not store.is_empty:
+                store.target_index += 1
             logging.info("Targeted crop changed to next one")
             need_rerendering.value = True
 
