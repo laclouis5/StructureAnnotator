@@ -1,9 +1,14 @@
 import argparse
 import cv2 as cv
 from functools import lru_cache
+from xxhash import xxh64_digest
 import json
 import logging
 import os
+
+
+def hashed_color(value: str):
+    return (*xxh64_digest(value.encode())[:3],)
 
 
 class PointAnnotation:
@@ -12,13 +17,13 @@ class PointAnnotation:
         self.x = x
         self.y = y
 
-    def draw_on(self, image, style=None):
+    def draw_on(self, image, style=None, color=None):
         style = style or {}
         radius = style.get("radius", 2)
-        color = (0, 255, 0) if self.kind == "stem" else (0, 0, 255)
+        _color = (0, 255, 0) if self.kind == "stem" else (0, 0, 255)
 
         cv.circle(image, center=(self.x, self.y), radius=radius,
-            color=color, thickness=-1, lineType=cv.LINE_AA)
+            color=color or _color, thickness=-1, lineType=cv.LINE_AA)
 
     def json_repr(self):
         return {"kind": self.kind, "location": {"x": self.x, "y": self.y}}
@@ -64,11 +69,13 @@ class BoxAnnotation:
     @property
     def y_mid(self): return int((self.y_min + self.y_max) / 2)
 
-    def draw_on(self, image, style=None):
+    def draw_on(self, image, style=None, color=None):
         style = style or {}
         thickness = style.get("thickness", 2)
+        color = color or (255, 0, 0)
+
         cv.rectangle(image, pt1=(self.x_min, self.y_min), pt2=(self.x_max, self.y_max),
-            color=(255, 0, 0), thickness=thickness, lineType=cv.LINE_AA)
+            color=color, thickness=thickness, lineType=cv.LINE_AA)
 
     def json_repr(self):
         return {
@@ -447,7 +454,7 @@ def main():
     image_name_view = ImageNameView(img_reader.img_name)
     canvas = Canvas(img_reader.img, [store, label_view, image_name_view, cursor])
 
-    def on_mouse_event(event, x, y, flags, params):
+    def on_mouse_event(event, x, y, flags):
         if event == cv.EVENT_LBUTTONDBLCLK:
             need_rerendering.value = True
             store.create_annotation_if_needed(label)
