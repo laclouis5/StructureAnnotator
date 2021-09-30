@@ -5,6 +5,7 @@ from xxhash import xxh64_digest
 import json
 import logging
 import os
+from time import monotonic
 
 
 def hashed_color(value: str):
@@ -447,6 +448,7 @@ def main():
     cv.namedWindow("Crop Structure Annotation Tool", cv.WINDOW_NORMAL)
     cv.resizeWindow("Crop Structure Annotation Tool", 800, 800)
     need_rerendering = RefCell(True)
+    t_previous_down = RefCell(0.0)
 
     store = ImageAnnotation().load_from_json(json_name_for(img_reader.img_name, save_dir))
     cursor = TargetCursor()
@@ -454,12 +456,8 @@ def main():
     image_name_view = ImageNameView(img_reader.img_name)
     canvas = Canvas(img_reader.img, [store, label_view, image_name_view, cursor])
 
-    def on_mouse_event(event, x, y, flags):
-        if event == cv.EVENT_LBUTTONDBLCLK:
-            need_rerendering.value = True
-            store.create_annotation_if_needed(label)
-            store.target.append_point(x, y)
-        elif event == cv.EVENT_MOUSEMOVE:
+    def on_mouse_event(event, x, y, flags, _):
+        if event == cv.EVENT_MOUSEMOVE:
             need_rerendering.value = True
             cursor.update(x, y)
             if flags == (cv.EVENT_FLAG_LBUTTON + cv.EVENT_FLAG_SHIFTKEY):
@@ -477,6 +475,13 @@ def main():
             store.target.box.update_tail(x, y)
             box = store.target.box
             logging.info(f"Bounding box added to target crop annotation (x_min: {box.x_min}, y_min: {box.y_min}, x_max: {box.x_max}, y_max: {box.y_max})")
+        elif event == cv.EVENT_LBUTTONDOWN:
+            time_diff = monotonic() - t_previous_down.value
+            if time_diff < 0.3:  # DB_CLICK
+                need_rerendering.value = True
+                store.create_annotation_if_needed(label)
+                store.target.append_point(x, y)
+            t_previous_down.value = monotonic()
 
     cv.setMouseCallback("Crop Structure Annotation Tool", on_mouse_event)
 
